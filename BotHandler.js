@@ -33,7 +33,7 @@ function testAuth(auth_token, callback) {
 }
 var usersMap = {};
 var teamsMap = {};
-var BotHandler = (function () {
+var BotHandler = /** @class */ (function () {
     function BotHandler() {
         this.slashCommands = {};
         this.events = {};

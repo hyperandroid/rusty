@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 var express = require("express");
 var bodyParser = require("body-parser");
-var BotHandler_1 = require("./BotHandler");
+var BotHandler_1 = require("../BotHandler");
 var fs = require("fs");
 var app = express();
 var PORT = 4690;
@@ -70,7 +70,14 @@ app.get("/", function (req, res) {
  *  }
  *
  */
-var credentials = JSON.parse(fs.readFileSync("credentials.json").toString());
+var credentials;
+try {
+    credentials = JSON.parse(fs.readFileSync(__dirname + "/../credentials.json").toString());
+}
+catch (e) {
+    console.error("can't load credentials: ", e);
+    process.exit(-1);
+}
 var bh = new BotHandler_1.default()
     .installForWebServer(app, credentials)
     .onSlashCommand('/slang', function (ch, command, text) {
@@ -133,4 +140,4 @@ function slangVerb(words) {
     }
     return { rightStr: rightStr, wrongStr: wrongStr };
 }
-//# sourceMappingURL=main.js.map
+//# sourceMappingURL=web.js.map

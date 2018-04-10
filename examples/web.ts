@@ -1,7 +1,7 @@
 import express = require("express");
 import bodyParser = require('body-parser');
-import BotHandler, {HearInfo} from "./BotHandler";
-import {Attachment, ConversationHelper} from "./ConversationHelper";
+import BotHandler, {HandlerProperties, HearInfo} from "../BotHandler";
+import {Attachment, ConversationHelper} from "../ConversationHelper";
 import * as fs from "fs";
 
 const app = express();
@@ -75,7 +75,13 @@ app.get("/", function(req:express.Request, res:express.Response) {
  *  }
  *
  */
-const credentials = JSON.parse(fs.readFileSync("credentials.json").toString());
+let credentials : HandlerProperties;
+try {
+    credentials= JSON.parse(fs.readFileSync(__dirname+"/../credentials.json").toString());
+} catch(e) {
+    console.error("can't load credentials: ",e);
+    process.exit(-1);
+}
 
 const bh = new BotHandler()
     .installForWebServer(app, credentials)

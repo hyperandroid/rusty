@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var request = require("request");
-var ConversationHelper = (function () {
+var ConversationHelper = /** @class */ (function () {
     function ConversationHelper(bh, user, team, response, body) {
         this.bh = bh;
         this.response = response;
