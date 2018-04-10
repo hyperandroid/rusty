@@ -1,5 +1,5 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
+exports.__esModule = true;
 var express = require("express");
 var bodyParser = require("body-parser");
 var BotHandler_1 = require("../BotHandler");
@@ -18,6 +18,7 @@ var slangMap = {
     'asap': 'As Soon As Possible',
     'atm': 'At The Moment',
     'btw': 'By The Way',
+    'brb': 'Be Right Back',
     'cu': 'See You',
     'dnd': 'Do Not Disturb',
     'diy': 'Do It Yourself',
@@ -34,6 +35,7 @@ var slangMap = {
     'imho': 'In My Humble Opinion',
     'l8r': 'Later',
     'lmao': 'Laugh My Ass Off',
+    'lkm': 'Let Me Know',
     'lol': 'Laugh Out Loudly',
     'nntr': 'No Need To Reply',
     'nm': 'Never Mind',
@@ -51,7 +53,7 @@ var slangMap = {
     'til': 'Today I Learnt',
     'tyt': 'Take Your Time',
     'wfm': 'Works For Me',
-    'wtf': 'What The F**k',
+    'wtf': 'What The F**k'
 };
 app.get("/", function (req, res) {
     res.send("hey ya!!");
@@ -78,7 +80,7 @@ catch (e) {
     console.error("can't load credentials: ", e);
     process.exit(-1);
 }
-var bh = new BotHandler_1.default()
+var bh = new BotHandler_1["default"]()
     .installForWebServer(app, credentials)
     .onSlashCommand('/slang', function (ch, command, text) {
     if (command === '/slang') {
@@ -140,4 +142,3 @@ function slangVerb(words) {
     }
     return { rightStr: rightStr, wrongStr: wrongStr };
 }
-//# sourceMappingURL=web.js.map
