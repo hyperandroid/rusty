@@ -1,8 +1,9 @@
 "use strict";
-exports.__esModule = true;
+Object.defineProperty(exports, "__esModule", { value: true });
 var express = require("express");
 var bodyParser = require("body-parser");
 var BotHandler_1 = require("../BotHandler");
+var ConversationHelper_1 = require("../ConversationHelper");
 var fs = require("fs");
 var app = express();
 var PORT = 4690;
@@ -53,7 +54,7 @@ var slangMap = {
     'til': 'Today I Learnt',
     'tyt': 'Take Your Time',
     'wfm': 'Works For Me',
-    'wtf': 'What The F**k'
+    'wtf': 'What The F**k',
 };
 app.get("/", function (req, res) {
     res.send("hey ya!!");
@@ -80,7 +81,7 @@ catch (e) {
     console.error("can't load credentials: ", e);
     process.exit(-1);
 }
-var bh = new BotHandler_1["default"]()
+var bh = new BotHandler_1.default()
     .installForWebServer(app, credentials)
     .onSlashCommand('/slang', function (ch, command, text) {
     if (command === '/slang') {
@@ -104,15 +105,103 @@ var bh = new BotHandler_1["default"]()
                 mrkdwn_in: ['text', 'pretext']
             });
         }
-        ch.reply('', attachments);
+        ch.reply('', attachments, true);
     }
     else {
-        ch.reply('unknown command');
+        ch.reply('unknown command', null, true);
     }
 })
     .onEvent(['hey (.*)'], ['direct_message', 'direct_mention', 'mention', 'app_mention'], function (ch, event, heard) {
     ch.reply(heard.matches[1]);
     ch.sendToIncomingWebHook('lololol');
+})
+    .onEvent(['test'], ['direct_mention', 'mention', 'app_mention'], function (ch, event, heard) {
+    var interactive_1 = {
+        ephemeral: true,
+        on: {
+            '2': function (ich, actions) {
+                ich.interactive(interactive_2);
+                ich.finish();
+            },
+            '3': function (ich, actions) {
+                ich.interactive(interactive_3);
+                ich.finish();
+            }
+        },
+        attachments: [
+            {
+                title: 'GOTO-2-OR-3',
+                fallback: 'go to 2-3',
+                callback_id: ConversationHelper_1.ConversationHelper.RandomCallbackUUID(),
+                attachment_type: 'default',
+                actions: [
+                    {
+                        name: 'id_2',
+                        type: 'button',
+                        text: 'Go To 2',
+                        value: '2'
+                    },
+                    {
+                        name: 'id_3',
+                        type: 'button',
+                        text: 'Go To 3',
+                        value: '3'
+                    },
+                ]
+            }
+        ]
+    };
+    var interactive_2 = {
+        ephemeral: true,
+        on: {
+            'id_default': function (ich, actions) {
+                ich.interactive(interactive_3);
+                ich.finish();
+            }
+        },
+        attachments: [
+            {
+                title: 'GOTO-3',
+                fallback: 'go to 3',
+                callback_id: ConversationHelper_1.ConversationHelper.RandomCallbackUUID(),
+                attachment_type: 'default',
+                actions: [
+                    {
+                        name: 'id_3',
+                        type: 'button',
+                        text: 'Go To 3',
+                        value: '3'
+                    }
+                ]
+            }
+        ]
+    };
+    var interactive_3 = {
+        ephemeral: true,
+        on: {
+            'id_default': function (ich, actions) {
+                ich.interactive(interactive_1);
+                ich.finish();
+            }
+        },
+        attachments: [
+            {
+                title: 'GOTO-1',
+                fallback: 'go to 1',
+                callback_id: ConversationHelper_1.ConversationHelper.RandomCallbackUUID(),
+                attachment_type: 'default',
+                actions: [
+                    {
+                        name: 'id_1',
+                        type: 'button',
+                        text: 'Go To 1',
+                        value: '1'
+                    }
+                ]
+            }
+        ]
+    };
+    ch.interactive(interactive_1);
 });
 function slangVerb(words) {
     // try no find a match for the following definitions:
@@ -142,3 +231,4 @@ function slangVerb(words) {
     }
     return { rightStr: rightStr, wrongStr: wrongStr };
 }
+//# sourceMappingURL=web.js.map

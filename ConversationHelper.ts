@@ -1,6 +1,7 @@
-import BotHandler, {Team, User} from "./BotHandler";
+import BotHandler, {InteractiveAction, InteractiveCallback, Team, User} from "./BotHandler";
 import express = require("express");
 import request = require("request");
+import process = require('process');
 
 export interface AttachmentField {
     title? : string;
@@ -11,14 +12,20 @@ export interface AttachmentField {
 export interface AttachmentAction {
     type : string;
     text : string;
-    url : string;
+    url? : string;
     style? : string;
+    value? : string;
+    name? : string;
 }
 
 /**
  * See https://api.slack.com/docs/message-attachments
  */
 export interface Attachment {
+
+    callback_id? : string;
+    attachment_type? : string;
+
     fallback: string;
 
     color? : string;        // #RRGGBB
@@ -48,14 +55,23 @@ export interface Attachment {
     actions? : AttachmentAction[];  // if defining actions, must define fallback
 }
 
+export type InteractiveCallbackMap = {[key:string]:InteractiveCallback}
+
+export interface InteractiveOptions {
+    ephemeral : boolean;
+    attachments : Attachment[];
+    on : InteractiveCallbackMap;
+}
+
+
 export class ConversationHelper {
 
-    private bh : BotHandler;
-    private response : express.Response;
-    private body : any;
+    protected bh : BotHandler;
+    protected response : express.Response;
+    protected body : any;
 
-    private team : Team;
-    private user : User;
+    protected team : Team;
+    protected user : User;
 
     constructor( bh : BotHandler, user:User, team:Team, response: express.Response, body:any ) {
         this.bh = bh;
@@ -90,17 +106,22 @@ export class ConversationHelper {
             text: message,
         };
 
+        if ( ephemeral ) {
+            form.user = this.user.id;
+        }
+
         if (attachments.length>0 ) {
             form.attachments= JSON.stringify(attachments);
         }
 
         request
-            .get('https://slack.com/api/' + endPoint,
+            .post(
+                'https://slack.com/api/' + endPoint,
                 {
                     headers: {
                         'content-type': 'application/json; charset=utf-8'
                     },
-                    qs: form
+                    form: form
                 },
                 (error: Error, response: request.Response, body_: any) => {
                     const body = JSON.parse(body_);
@@ -108,11 +129,16 @@ export class ConversationHelper {
                         console.log(error, body);
                     }
                 });
-
-        this.response.status(200).send('');
     }
 
-    sendToIncomingWebHook( message:string ) {
+    /**
+     * Send a message to registered channel incoming webhook.
+     *
+     *
+     * @param {string} message
+     * @param {Attachment[]} attachments optional attachment collection.
+     */
+    sendToIncomingWebHook( message:string, attachments?:Attachment[] ) {
 
         let url = '';
         try {
@@ -128,6 +154,7 @@ export class ConversationHelper {
             headers: {'content-type': 'application/json'},
             json: {
                 text: message,
+                attachments : (typeof attachments!=='undefined' ? attachments : [])
             }
         }, function (error, response, body) {
             if (error) {
@@ -140,7 +167,84 @@ export class ConversationHelper {
 
     }
 
-    startConversation( ) {
+    /**
+     * Interactive calls, don't need to be ack'ed.
+     *
+     *
+     * @param {InteractiveOptions} options
+     * @param {Attachment[]} attachments
+     * @param {InteractiveCallback} callback
+     */
+    interactive( options:InteractiveOptions ) {
 
+        let callback_id = '';
+        options.attachments.forEach( attachment => {
+            if ( typeof attachment.callback_id!=='undefined' ) {
+                callback_id = attachment.callback_id;
+            }
+        });
+
+        if ( callback_id!=='' ) {
+
+            this.bh.registerInteractiveRequest(
+                this.user.id,
+                callback_id,
+                (hc:InteractiveConversationHelper, actions:InteractiveAction[]) => {
+
+                    actions.forEach( action => {
+
+                        let on_callback = options.on[action.value];
+
+                        if (typeof on_callback==='undefined') {
+                            on_callback = options.on['id_default']
+                        }
+
+                        if (typeof on_callback!=='undefined') {
+                            on_callback(hc, actions);
+                        } else {
+                            //
+                            console.info(`UUID:${callback_id} interactive action ${action.value} w/o handler.`);
+                        }
+                    });
+
+                });
+
+            this.reply(
+                '',
+                options.attachments,
+                options.ephemeral
+            );
+        } else
+            console.error('Interactive w/o callback_id on attachments.');
+
+    }
+
+    static RandomCallbackUUID() {
+        let b= Buffer.alloc(16);
+        b.writeDoubleBE( process.hrtime()[1], 0 );
+        b.writeDoubleBE( process.hrtime()[1], 8 );
+        const hexNum = b.toString('hex');
+        const callback_id = hexNum.substr(0, 8) + '-' +
+            hexNum.substr(8, 4) + '-' +
+            hexNum.substr(12, 4) + '-' +
+            hexNum.substr(16, 4) + '-' +
+            hexNum.substr(20)
+
+        return callback_id;
+    }
+
+}
+
+export class InteractiveConversationHelper extends ConversationHelper {
+
+    protected callback_id : string;
+
+    constructor( bh : BotHandler, user:User, team:Team, response: express.Response, body:any, callback_id:string ) {
+        super(bh, user, team, response, body);
+        this.callback_id = callback_id;
+    }
+
+    finish() {
+        this.bh.unregisterInteractiveRequest( this.user.id, this.callback_id );
     }
 }

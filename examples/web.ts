@@ -1,7 +1,7 @@
 import express = require("express");
 import bodyParser = require('body-parser');
-import BotHandler, {HandlerProperties, HearInfo} from "../BotHandler";
-import {Attachment, ConversationHelper} from "../ConversationHelper";
+import BotHandler, {HandlerProperties, HearInfo, InteractiveAction} from "../BotHandler";
+import {Attachment, ConversationHelper, InteractiveConversationHelper} from "../ConversationHelper";
 import * as fs from "fs";
 
 const app = express();
@@ -116,9 +116,9 @@ const bh = new BotHandler()
                     });
                 }
 
-                ch.reply('', attachments );
+                ch.reply('', attachments, true );
             } else {
-                ch.reply('unknown command');
+                ch.reply('unknown command', null,true);
             }
         })
     .onEvent(
@@ -127,6 +127,105 @@ const bh = new BotHandler()
         ( ch: ConversationHelper, event:string, heard:HearInfo ) => {
             ch.reply(heard.matches[1]);
             ch.sendToIncomingWebHook('lololol');
+        })
+    .onEvent(
+        ['test'],
+        ['direct_mention','mention','app_mention'],
+        (ch:ConversationHelper, event:string, heard:HearInfo ) => {
+
+            const interactive_1 = {
+                ephemeral: true,
+                on: {
+                    '2': (ich: InteractiveConversationHelper, actions: InteractiveAction[]) => {
+                        ich.interactive(interactive_2);
+                        ich.finish();
+                    },
+                    '3': (ich: InteractiveConversationHelper, actions: InteractiveAction[]) => {
+                        ich.interactive(interactive_3);
+                        ich.finish();
+                    }
+                },
+                attachments: [
+                    {
+                        title: 'GOTO-2-OR-3',
+                        fallback: 'go to 2-3',
+                        callback_id: ConversationHelper.RandomCallbackUUID(),
+                        attachment_type: 'default',
+                        actions: [
+                            {
+                                name: 'id_2',
+                                type: 'button',
+                                text: 'Go To 2',
+                                value: '2'
+                            },
+                            {
+                                name: 'id_3',
+                                type: 'button',
+                                text: 'Go To 3',
+                                value: '3'
+                            },
+                        ]
+
+                    }
+                ]
+            };
+
+            const interactive_2 = {
+                ephemeral: true,
+                on: {
+                    'id_default': (ich: InteractiveConversationHelper, actions: InteractiveAction[]) => {
+                        ich.interactive(interactive_3);
+                        ich.finish();
+                    }
+                },
+                attachments: [
+                    {
+                        title: 'GOTO-3',
+                        fallback: 'go to 3',
+                        callback_id: ConversationHelper.RandomCallbackUUID(),
+                        attachment_type: 'default',
+                        actions: [
+                            {
+                                name: 'id_3',
+                                type: 'button',
+                                text: 'Go To 3',
+                                value: '3'
+                            }
+                        ]
+
+                    }
+                ]
+            };
+
+            const interactive_3 = {
+                ephemeral: true,
+                on: {
+                    'id_default': (ich: InteractiveConversationHelper, actions: InteractiveAction[]) => {
+                        ich.interactive(interactive_1);
+                        ich.finish();
+                    }
+                },
+                attachments: [
+                    {
+                        title: 'GOTO-1',
+                        fallback: 'go to 1',
+                        callback_id: ConversationHelper.RandomCallbackUUID(),
+                        attachment_type: 'default',
+                        actions: [
+                            {
+                                name: 'id_1',
+                                type: 'button',
+                                text: 'Go To 1',
+                                value: '1'
+                            }
+                        ]
+
+                    }
+                ]
+            };
+
+            ch.interactive(interactive_1);
+
         });
 
 interface SlangVerbResult {

@@ -33,6 +33,7 @@ function testAuth(auth_token, callback) {
 }
 var usersMap = {};
 var teamsMap = {};
+var interactiveMap = {};
 var BotHandler = /** @class */ (function () {
     function BotHandler() {
         this.slashCommands = {};
@@ -157,29 +158,39 @@ var BotHandler = /** @class */ (function () {
             this.__secureEventsAndSlashCommands(end_point, webProps.tokens);
         }
         this.app.post(end_point, function (req, res) {
-            if (req.body.type === "url_verification") {
+            // interactive_message get body as string. command or event callback as json :S
+            var body = req.body;
+            if (typeof body === 'string') {
+                body = JSON.parse(body);
+            }
+            // some other times, all message stuff comes in a string payload...
+            if (typeof body.payload !== 'undefined' && typeof body.payload === 'string') {
+                body = JSON.parse(body.payload);
+            }
+            if (body.type === "url_verification") {
                 // challenge. respond with back with it
                 res.contentType("text/plain");
-                res.send(req.body.challenge);
+                res.send(body.challenge);
             }
             else {
-                if (typeof req.body.command !== "undefined") {
+                if (typeof body.command !== "undefined") {
                     // slash commands
-                    _this.__handleSlashCommand(req.body, res);
+                    _this.__handleSlashCommand(body, res);
                 }
-                else if (req.body.type === 'event_callback') {
+                else if (body.type === 'event_callback') {
                     // events
-                    _this.__handleEvent(req.body, res);
+                    _this.__handleEvent(body, res);
+                }
+                else if (body.type === 'interactive_message') {
+                    // interactive events
+                    _this.__handleInteractiveEvent(body, res);
                 }
                 else {
-                    //     if (typeof req.body.callback_id!=='undefined') {
-                    //     // interactive events
-                    //     this.__handleInteractiveEvent(req.body, res );
                     // } else if (req.body.type==='message_callback') {
                     //     // message callback
                     //     this.__handleMessageCallback(req.body, res );
                     // } else {
-                    _this.__handleUnknown(req.body, res);
+                    _this.__handleUnknown(body, res);
                 }
             }
         });
@@ -189,8 +200,38 @@ var BotHandler = /** @class */ (function () {
         eres.status(200).send('');
     };
     BotHandler.prototype.__handleInteractiveEvent = function (body, eres) {
-        console.log('interactive message', body);
-        eres.status(200).send('');
+        var user_id = body.user.id;
+        var team_id = body.team.id;
+        var callback_id = body.callback_id;
+        // normalize
+        body.channel_id = body.channel.id;
+        try {
+            var ch = interactiveMap[user_id][callback_id];
+            if (typeof ch !== 'undefined') {
+                var team = teamsMap[team_id];
+                if (typeof team === 'undefined') {
+                    console.info("interactive event for unknown team " + body.team.id + ".");
+                }
+                else {
+                    // build user out of message info.
+                    var user = {
+                        id: body.user.id,
+                        user: body.user.name,
+                        team_id: body.team.id,
+                        access_token: team.bot.access_token,
+                        scopes: ['']
+                    };
+                    ch(new ConversationHelper_1.InteractiveConversationHelper(this, user, team, eres, body, callback_id), body.actions);
+                    eres.status(200).send('');
+                    return;
+                }
+            }
+        }
+        catch (e) {
+            console.error("error handling interactive event", body);
+        }
+        console.error('unknown interactive message', body);
+        eres.status(500).send('callback id not known');
     };
     BotHandler.prototype.__handleMessageCallback = function (body, eres) {
         console.log('message callback', body);
@@ -230,11 +271,11 @@ var BotHandler = /** @class */ (function () {
         body.channel_id = body.event.channel;
         var eventPatterns = this.events[event];
         if (typeof eventPatterns !== 'undefined') {
-            var user_1 = usersMap[body.user_id];
+            var user_1 = usersMap[body.event.user];
             var team_1 = teamsMap[body.team_id];
             eventPatterns.forEach(function (pattern) {
                 var res = pattern.re.exec(text);
-                if (res !== null && res.length > 1) {
+                if (res !== null && res.length >= 1) {
                     pattern.callback(new ConversationHelper_1.ConversationHelper(_this, user_1, team_1, eres, body), text, {
                         matches: res,
                         message: text
@@ -242,9 +283,7 @@ var BotHandler = /** @class */ (function () {
                 }
             });
         }
-        else {
-            eres.status(200).send('');
-        }
+        eres.status(200).send('');
     };
     BotHandler.prototype.__handleSlashCommand = function (body, res) {
         var commandCallback = this.slashCommands[body.command];
@@ -252,6 +291,7 @@ var BotHandler = /** @class */ (function () {
             var user = usersMap[body.user_id];
             var team = teamsMap[body.team_id];
             commandCallback(new ConversationHelper_1.ConversationHelper(this, user, team, res, body), body.command, body.text);
+            res.status(200).send('');
         }
         else {
             res.status(500).send("unknown slash command " + body.command);
@@ -289,10 +329,14 @@ var BotHandler = /** @class */ (function () {
             hear = hear_;
         }
         events.forEach(function (event) {
-            _this.events[event] = [];
+            var ev_array = _this.events[event];
+            if (typeof ev_array === 'undefined') {
+                ev_array = [];
+                _this.events[event] = ev_array;
+            }
             hear.forEach(function (h) {
                 var re = new RegExp(h);
-                _this.events[event].push({
+                ev_array.push({
                     pattern: h,
                     re: re,
                     callback: callback
@@ -300,6 +344,22 @@ var BotHandler = /** @class */ (function () {
             });
         });
         return this;
+    };
+    BotHandler.prototype.registerInteractiveRequest = function (user_id, callback_id, callback) {
+        var user = interactiveMap[user_id];
+        if (typeof user === 'undefined') {
+            user = {};
+            interactiveMap[user_id] = user;
+        }
+        user[callback_id] = callback;
+    };
+    BotHandler.prototype.unregisterInteractiveRequest = function (user_id, callback_id) {
+        try {
+            interactiveMap[user_id][callback_id] = undefined;
+        }
+        catch (e) {
+            console.error("Error unregistering interactive request for " + user_id + ", " + callback_id + ".");
+        }
     };
     return BotHandler;
 }());
