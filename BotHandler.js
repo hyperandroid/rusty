@@ -173,6 +173,7 @@ var BotHandler = /** @class */ (function () {
                 res.send(body.challenge);
             }
             else {
+                console.log(body);
                 if (typeof body.command !== "undefined") {
                     // slash commands
                     _this.__handleSlashCommand(body, res);
@@ -205,33 +206,37 @@ var BotHandler = /** @class */ (function () {
         var callback_id = body.callback_id;
         // normalize
         body.channel_id = body.channel.id;
+        var team = teamsMap[team_id];
+        // build user out of message info.
+        var user = {
+            id: body.user.id,
+            user: body.user.name,
+            team_id: body.team.id,
+            access_token: team.bot.app_token,
+            scopes: ['']
+        };
         try {
             var ch = interactiveMap[user_id][callback_id];
             if (typeof ch !== 'undefined') {
-                var team = teamsMap[team_id];
                 if (typeof team === 'undefined') {
                     console.info("interactive event for unknown team " + body.team.id + ".");
                 }
                 else {
-                    // build user out of message info.
-                    var user = {
-                        id: body.user.id,
-                        user: body.user.name,
-                        team_id: body.team.id,
-                        access_token: team.bot.access_token,
-                        scopes: ['']
-                    };
-                    ch(new ConversationHelper_1.InteractiveConversationHelper(this, user, team, eres, body, callback_id), body.actions);
-                    eres.status(200).send('');
+                    var ic = new ConversationHelper_1.InteractiveConversationHelper(this, user, team, eres, body, callback_id);
+                    ch(ic, body.actions);
+                    // might not be executed.
+                    ic.respond(200, '');
                     return;
                 }
             }
         }
         catch (e) {
-            console.error("error handling interactive event", body);
+            // eat error of accessing interactiveMap[user_id][callback_id]
         }
         console.error('unknown interactive message', body);
-        eres.status(500).send('callback id not known');
+        eres.status(200).send('');
+        var msg = new ConversationHelper_1.ConversationHelper(this, user, team, eres, body);
+        msg.reply("This conversation branch has ended before.", undefined, true);
     };
     BotHandler.prototype.__handleMessageCallback = function (body, eres) {
         console.log('message callback', body);
@@ -265,6 +270,8 @@ var BotHandler = /** @class */ (function () {
     };
     BotHandler.prototype.__handleEvent = function (body, eres) {
         var _this = this;
+        // ok, event started.
+        eres.status(200).send('');
         var event = body.event.type;
         var text = body.event.text;
         // normalize expected info.
@@ -276,22 +283,23 @@ var BotHandler = /** @class */ (function () {
             eventPatterns.forEach(function (pattern) {
                 var res = pattern.re.exec(text);
                 if (res !== null && res.length >= 1) {
-                    pattern.callback(new ConversationHelper_1.ConversationHelper(_this, user_1, team_1, eres, body), text, {
+                    var hc = new ConversationHelper_1.ConversationHelper(_this, user_1, team_1, eres, body);
+                    pattern.callback(hc, text, {
                         matches: res,
                         message: text
                     });
                 }
             });
         }
-        eres.status(200).send('');
     };
     BotHandler.prototype.__handleSlashCommand = function (body, res) {
         var commandCallback = this.slashCommands[body.command];
         if (typeof commandCallback !== 'undefined') {
             var user = usersMap[body.user_id];
             var team = teamsMap[body.team_id];
-            commandCallback(new ConversationHelper_1.ConversationHelper(this, user, team, res, body), body.command, body.text);
-            res.status(200).send('');
+            var hc = new ConversationHelper_1.ConversationHelper(this, user, team, res, body);
+            commandCallback(hc, body.command, body.text);
+            hc.respond(200, '');
         }
         else {
             res.status(500).send("unknown slash command " + body.command);
@@ -345,7 +353,7 @@ var BotHandler = /** @class */ (function () {
         });
         return this;
     };
-    BotHandler.prototype.registerInteractiveRequest = function (user_id, callback_id, callback) {
+    BotHandler.prototype.registerInteractiveRequest = function (user_id, callback_id, ts, callback) {
         var user = interactiveMap[user_id];
         if (typeof user === 'undefined') {
             user = {};
@@ -355,11 +363,13 @@ var BotHandler = /** @class */ (function () {
     };
     BotHandler.prototype.unregisterInteractiveRequest = function (user_id, callback_id) {
         try {
+            var ip = interactiveMap[user_id][callback_id];
             interactiveMap[user_id][callback_id] = undefined;
         }
         catch (e) {
             console.error("Error unregistering interactive request for " + user_id + ", " + callback_id + ".");
         }
+        return '';
     };
     return BotHandler;
 }());

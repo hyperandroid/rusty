@@ -14,15 +14,16 @@ var request = require("request");
 var process = require("process");
 var ConversationHelper = /** @class */ (function () {
     function ConversationHelper(bh, user, team, response, body) {
+        this.responded = false;
         this.bh = bh;
         this.response = response;
         this.body = body;
         this.user = user;
         this.team = team;
     }
-    ConversationHelper.prototype.reply = function (message, attachments_, ephemeral) {
+    ConversationHelper.prototype.reply = function (message, attachments_, ephemeral, callback) {
         var channel = this.body.channel_id;
-        var token = this.team.incoming_web_hook.token;
+        var token = this.team.bot.app_token;
         var endPoint = 'chat.postMessage';
         if (ephemeral) {
             endPoint = 'chat.postEphemeral';
@@ -55,6 +56,9 @@ var ConversationHelper = /** @class */ (function () {
             form: form
         }, function (error, response, body_) {
             var body = JSON.parse(body_);
+            if (typeof callback !== 'undefined') {
+                callback(body);
+            }
             if (error || response.statusCode !== 200 || body.ok === false) {
                 console.log(error, body);
             }
@@ -97,10 +101,9 @@ var ConversationHelper = /** @class */ (function () {
      *
      *
      * @param {InteractiveOptions} options
-     * @param {Attachment[]} attachments
-     * @param {InteractiveCallback} callback
      */
     ConversationHelper.prototype.interactive = function (options) {
+        var _this = this;
         var callback_id = '';
         options.attachments.forEach(function (attachment) {
             if (typeof attachment.callback_id !== 'undefined') {
@@ -108,22 +111,32 @@ var ConversationHelper = /** @class */ (function () {
             }
         });
         if (callback_id !== '') {
-            this.bh.registerInteractiveRequest(this.user.id, callback_id, function (hc, actions) {
-                actions.forEach(function (action) {
-                    var on_callback = options.on[action.value];
-                    if (typeof on_callback === 'undefined') {
-                        on_callback = options.on['id_default'];
-                    }
-                    if (typeof on_callback !== 'undefined') {
-                        on_callback(hc, actions);
-                    }
-                    else {
-                        //
-                        console.info("UUID:" + callback_id + " interactive action " + action.value + " w/o handler.");
-                    }
+            this.reply('', options.attachments, options.ephemeral, function (body) {
+                var ts = '';
+                try {
+                    ts = body.event.ts; // para update, el timestamp del mensaje a modificar es este.
+                }
+                catch (e) {
+                    ts = body.message_ts;
+                }
+                console.log("received reply to interactive " + JSON.stringify(body));
+                // on reply callback, take message ts identifier to make responses.
+                _this.bh.registerInteractiveRequest(_this.user.id, callback_id, ts, function (hc, actions) {
+                    actions.forEach(function (action) {
+                        var on_callback = options.on[action.value];
+                        if (typeof on_callback === 'undefined') {
+                            on_callback = options.on['id_default'];
+                        }
+                        if (typeof on_callback !== 'undefined') {
+                            on_callback(hc, actions);
+                        }
+                        else {
+                            //
+                            console.info("UUID:" + callback_id + " interactive action " + action.value + " w/o handler.");
+                        }
+                    });
                 });
             });
-            this.reply('', options.attachments, options.ephemeral);
         }
         else
             console.error('Interactive w/o callback_id on attachments.');
@@ -133,12 +146,18 @@ var ConversationHelper = /** @class */ (function () {
         b.writeDoubleBE(process.hrtime()[1], 0);
         b.writeDoubleBE(process.hrtime()[1], 8);
         var hexNum = b.toString('hex');
-        var callback_id = hexNum.substr(0, 8) + '-' +
+        return hexNum.substr(0, 8) + '-' +
             hexNum.substr(8, 4) + '-' +
             hexNum.substr(12, 4) + '-' +
             hexNum.substr(16, 4) + '-' +
             hexNum.substr(20);
-        return callback_id;
+    };
+    ConversationHelper.prototype.respond = function (code, message) {
+        if (this.responded) {
+            return;
+        }
+        this.response.status(code).send(message);
+        this.responded = true;
     };
     return ConversationHelper;
 }());
@@ -148,10 +167,77 @@ var InteractiveConversationHelper = /** @class */ (function (_super) {
     function InteractiveConversationHelper(bh, user, team, response, body, callback_id) {
         var _this = _super.call(this, bh, user, team, response, body) || this;
         _this.callback_id = callback_id;
+        _this.response_url = body.response_url;
         return _this;
     }
-    InteractiveConversationHelper.prototype.finish = function () {
-        this.bh.unregisterInteractiveRequest(this.user.id, this.callback_id);
+    /**
+     * set an interactive message reply.
+     * In this case, we just return back immediately a response to slack.
+     *
+     * Other ways of communicating back to slack would be:
+     *   + use internal response_url
+     *   + if original message is not ephemeral, body payload will include an 'original_message'
+     *     field that could be used to replace or modify the original message.
+     *
+     *   request.post(
+     *       "https://slack.com/api/chat.update",
+     *       {
+     *           headers: {
+     *               'content-type': 'application/json; charset=utf-8'
+     *           },
+     *           form: {
+     *               token: this.user.access_token,
+     *               channel: this.body.channel_id,
+     *               attachments: JSON.stringify(attachments),
+     *               ts: body.original_message.ts,
+     *               as_user: true,
+     *           }
+     *       },
+     *       (error: Error, response: request.Response, body: any) => {
+     *           console.log(body);
+     *       });
+     *
+     *  or
+     *
+     *   request.post(
+     *       this.request_url,
+     *       {
+     *           headers: {
+     *               'content-type': 'application/json; charset=utf-8'
+     *           },
+     *           form: {
+     *               token: this.user.access_token,
+     *               channel: this.body.channel_id,
+     *               attachments: JSON.stringify(attachments)
+     *           }
+     *       },
+     *       (error: Error, response: request.Response, body: any) => {
+     *           console.log(body);
+     *       });
+     *
+     * @param attachments {string|Attachment[]} reply text
+     * @param ephemeral {boolean} set this reply ephemeral
+     * @param replaceOriginal {boolean} replace original interactive message.
+     *
+     */
+    InteractiveConversationHelper.prototype.setReply = function (attachments, ephemeral, replaceOriginal) {
+        var ts = this.bh.unregisterInteractiveRequest(this.user.id, this.callback_id);
+        console.log('updating message : ' + ts);
+        if (typeof attachments !== 'undefined') {
+            var res = {
+                replace_original: replaceOriginal,
+            };
+            if (typeof attachments === 'string') {
+                res.text = attachments;
+            }
+            else {
+                res.attachments = attachments;
+            }
+            if (ephemeral) {
+                res.response_type = "ephemeral";
+            }
+            this.respond(200, res);
+        }
     };
     return InteractiveConversationHelper;
 }(ConversationHelper));

@@ -122,7 +122,7 @@ export interface InteractiveAction {
     value: string;
 }
 
-export type InteractiveCallback = (ch:ConversationHelper, responses:InteractiveAction[] ) => void;
+export type InteractiveCallback = (ch:InteractiveConversationHelper, responses:InteractiveAction[] ) => void;
 
 function clientAPI<T>( endPoint:string, params:APIParams, callback : APICallback<T>) {
 
@@ -340,6 +340,8 @@ export default class BotHandler {
                 res.send( body.challenge );
             } else {
 
+                console.log(body);
+
                 if ( typeof body.command!=="undefined" ) {
                     // slash commands
                     this.__handleSlashCommand( body, res );
@@ -375,37 +377,44 @@ export default class BotHandler {
         // normalize
         body.channel_id = body.channel.id;
 
+        const team= teamsMap[team_id];
+        // build user out of message info.
+        let user = {
+            id: body.user.id,
+            user: body.user.name,
+            team_id: body.team.id,
+            access_token: team.bot.app_token,
+            scopes: ['']
+        };
+
         try {
             const ch = interactiveMap[user_id][callback_id];
 
             if ( typeof ch!=='undefined' ) {
-                const team= teamsMap[team_id];
                 if ( typeof team==='undefined' ) {
                     console.info(`interactive event for unknown team ${body.team.id}.`);
                 } else {
 
-                    // build user out of message info.
-                    let user = {
-                        id: body.user.id,
-                        user: body.user.name,
-                        team_id: body.team.id,
-                        access_token: team.bot.access_token,
-                        scopes: ['']
-                    };
+                    const ic = new InteractiveConversationHelper(this, user, team, eres, body, callback_id);
+                    ch(ic, body.actions );
 
-                    ch(new InteractiveConversationHelper(this, user, team, eres, body, callback_id), body.actions );
-
-                    eres.status(200).send('');
+                    // might not be executed.
+                    ic.respond(200,'');
 
                     return;
                 }
             }
         } catch(e) {
-            console.error(`error handling interactive event`, body);
+            // eat error of accessing interactiveMap[user_id][callback_id]
         }
 
         console.error('unknown interactive message', body);
-        eres.status(500).send('callback id not known');
+        eres.status(200).send('');
+        const msg = new ConversationHelper(this, user, team, eres, body);
+        msg.reply(
+            `This conversation branch has ended before.`,
+            undefined,
+            true);
     }
 
     __handleMessageCallback( body:any, eres:express.Response ) {
@@ -447,6 +456,9 @@ export default class BotHandler {
 
     __handleEvent( body : any, eres: express.Response ) {
 
+        // ok, event started.
+        eres.status(200).send('');
+
         const event = body.event.type as string;
         const text = body.event.text as string;
 
@@ -463,8 +475,9 @@ export default class BotHandler {
 
                 const res= pattern.re.exec( text );
                 if ( res!==null && res.length>=1 ) {
+                    const hc = new ConversationHelper(this, user, team, eres, body );
                     pattern.callback(
-                        new ConversationHelper(this, user, team, eres, body ),
+                        hc,
                         text,
                         {
                             matches : res,
@@ -472,10 +485,7 @@ export default class BotHandler {
                         });
                 }
             });
-
         }
-
-        eres.status(200).send('');
     }
 
     __handleSlashCommand( body : any, res: express.Response ) {
@@ -486,8 +496,9 @@ export default class BotHandler {
             const user= usersMap[body.user_id];
             const team= teamsMap[body.team_id];
 
-            commandCallback( new ConversationHelper(this, user, team ,res, body), body.command, body.text );
-            res.status(200).send('');
+            const hc = new ConversationHelper(this, user, team ,res, body);
+            commandCallback( hc, body.command, body.text );
+            hc.respond(200,'');
         } else {
             res.status(500).send( `unknown slash command ${body.command}` );
         }
@@ -545,7 +556,7 @@ export default class BotHandler {
         return this;
     }
 
-    registerInteractiveRequest( user_id : string, callback_id : string, callback:InteractiveCallback ) {
+    registerInteractiveRequest( user_id : string, callback_id : string, ts : string, callback:InteractiveCallback ) {
 
         let user = interactiveMap[user_id];
         if ( typeof user==='undefined' ) {
@@ -558,9 +569,12 @@ export default class BotHandler {
 
     unregisterInteractiveRequest( user_id: string, callback_id: string ) {
         try {
+            const ip = interactiveMap[user_id][callback_id];
             interactiveMap[user_id][callback_id] = undefined;
         } catch(e) {
             console.error(`Error unregistering interactive request for ${user_id}, ${callback_id}.`)
         }
+
+        return '';
     }
 }

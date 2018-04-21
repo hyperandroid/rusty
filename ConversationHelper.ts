@@ -73,6 +73,8 @@ export class ConversationHelper {
     protected team : Team;
     protected user : User;
 
+    protected responded : boolean= false;
+
     constructor( bh : BotHandler, user:User, team:Team, response: express.Response, body:any ) {
         this.bh = bh;
         this.response = response;
@@ -81,10 +83,10 @@ export class ConversationHelper {
         this.team = team;
     }
 
-    reply( message:string, attachments_? : Attachment|Attachment[], ephemeral?:boolean ) {
+    reply( message:string, attachments_? : Attachment|Attachment[], ephemeral?:boolean, callback?:(body:any)=>void ) {
 
         const channel = this.body.channel_id;
-        const token = this.team.incoming_web_hook.token;
+        const token = this.team.bot.app_token;
 
         let endPoint = 'chat.postMessage';
         if ( ephemeral ) {
@@ -125,6 +127,11 @@ export class ConversationHelper {
                 },
                 (error: Error, response: request.Response, body_: any) => {
                     const body = JSON.parse(body_);
+
+                    if ( typeof callback!=='undefined' ) {
+                        callback(body);
+                    }
+
                     if (error || response.statusCode !== 200 || body.ok === false) {
                         console.log(error, body);
                     }
@@ -172,8 +179,6 @@ export class ConversationHelper {
      *
      *
      * @param {InteractiveOptions} options
-     * @param {Attachment[]} attachments
-     * @param {InteractiveCallback} callback
      */
     interactive( options:InteractiveOptions ) {
 
@@ -186,34 +191,47 @@ export class ConversationHelper {
 
         if ( callback_id!=='' ) {
 
-            this.bh.registerInteractiveRequest(
-                this.user.id,
-                callback_id,
-                (hc:InteractiveConversationHelper, actions:InteractiveAction[]) => {
-
-                    actions.forEach( action => {
-
-                        let on_callback = options.on[action.value];
-
-                        if (typeof on_callback==='undefined') {
-                            on_callback = options.on['id_default']
-                        }
-
-                        if (typeof on_callback!=='undefined') {
-                            on_callback(hc, actions);
-                        } else {
-                            //
-                            console.info(`UUID:${callback_id} interactive action ${action.value} w/o handler.`);
-                        }
-                    });
-
-                });
-
             this.reply(
                 '',
                 options.attachments,
-                options.ephemeral
-            );
+                options.ephemeral,
+                (body:any) => {
+
+                    let ts= '';
+                    try {
+                        ts= body.event.ts ;    // para update, el timestamp del mensaje a modificar es este.
+                    } catch(e) {
+                        ts = body.message_ts;
+                    }
+
+                    console.log(`received reply to interactive ${JSON.stringify(body)}`);
+
+                    // on reply callback, take message ts identifier to make responses.
+                    this.bh.registerInteractiveRequest(
+                        this.user.id,
+                        callback_id,
+                        ts,
+                        (hc:InteractiveConversationHelper, actions:InteractiveAction[]) => {
+
+                            actions.forEach( action => {
+
+                                let on_callback = options.on[action.value];
+
+                                if (typeof on_callback==='undefined') {
+                                    on_callback = options.on['id_default']
+                                }
+
+                                if (typeof on_callback!=='undefined') {
+                                    on_callback(hc, actions);
+                                } else {
+                                    //
+                                    console.info(`UUID:${callback_id} interactive action ${action.value} w/o handler.`);
+                                }
+                            });
+
+                        });
+
+            });
         } else
             console.error('Interactive w/o callback_id on attachments.');
 
@@ -224,27 +242,105 @@ export class ConversationHelper {
         b.writeDoubleBE( process.hrtime()[1], 0 );
         b.writeDoubleBE( process.hrtime()[1], 8 );
         const hexNum = b.toString('hex');
-        const callback_id = hexNum.substr(0, 8) + '-' +
+        return hexNum.substr(0, 8) + '-' +
             hexNum.substr(8, 4) + '-' +
             hexNum.substr(12, 4) + '-' +
             hexNum.substr(16, 4) + '-' +
-            hexNum.substr(20)
-
-        return callback_id;
+            hexNum.substr(20);
     }
 
+    respond( code:number, message:any ) {
+        if ( this.responded ) {
+            return;
+        }
+        this.response.status(code).send(message);
+        this.responded= true;
+    }
 }
 
 export class InteractiveConversationHelper extends ConversationHelper {
 
     protected callback_id : string;
+    protected response_url : string;
 
     constructor( bh : BotHandler, user:User, team:Team, response: express.Response, body:any, callback_id:string ) {
         super(bh, user, team, response, body);
         this.callback_id = callback_id;
+        this.response_url = body.response_url;
     }
 
-    finish() {
-        this.bh.unregisterInteractiveRequest( this.user.id, this.callback_id );
+    /**
+     * set an interactive message reply.
+     * In this case, we just return back immediately a response to slack.
+     *
+     * Other ways of communicating back to slack would be:
+     *   + use internal response_url
+     *   + if original message is not ephemeral, body payload will include an 'original_message'
+     *     field that could be used to replace or modify the original message.
+     *
+     *   request.post(
+     *       "https://slack.com/api/chat.update",
+     *       {
+     *           headers: {
+     *               'content-type': 'application/json; charset=utf-8'
+     *           },
+     *           form: {
+     *               token: this.user.access_token,
+     *               channel: this.body.channel_id,
+     *               attachments: JSON.stringify(attachments),
+     *               ts: body.original_message.ts,
+     *               as_user: true,
+     *           }
+     *       },
+     *       (error: Error, response: request.Response, body: any) => {
+     *           console.log(body);
+     *       });
+     *
+     *  or
+     *
+     *   request.post(
+     *       this.request_url,
+     *       {
+     *           headers: {
+     *               'content-type': 'application/json; charset=utf-8'
+     *           },
+     *           form: {
+     *               token: this.user.access_token,
+     *               channel: this.body.channel_id,
+     *               attachments: JSON.stringify(attachments)
+     *           }
+     *       },
+     *       (error: Error, response: request.Response, body: any) => {
+     *           console.log(body);
+     *       });
+     *
+     * @param attachments {string|Attachment[]} reply text
+     * @param ephemeral {boolean} set this reply ephemeral
+     * @param replaceOriginal {boolean} replace original interactive message.
+     *
+     */
+    setReply(attachments : string|Attachment[], ephemeral:boolean, replaceOriginal:boolean ) {
+        const ts = this.bh.unregisterInteractiveRequest( this.user.id, this.callback_id );
+
+        console.log('updating message : '+ts);
+
+        if ( typeof attachments!=='undefined' ) {
+
+            let res : any = {
+                replace_original: replaceOriginal,
+            };
+
+            if (typeof attachments==='string') {
+                res.text = attachments;
+            } else {
+                res.attachments= attachments;
+            }
+
+            if (ephemeral) {
+                res.response_type= "ephemeral";
+            }
+
+            this.respond(200, res);
+        }
     }
 }
