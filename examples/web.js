@@ -1,5 +1,5 @@
 "use strict";
-exports.__esModule = true;
+Object.defineProperty(exports, "__esModule", { value: true });
 var express = require("express");
 var bodyParser = require("body-parser");
 var Rusty_1 = require("../Rusty");
@@ -55,7 +55,7 @@ var slangMap = {
     'til': 'Today I Learnt',
     'tyt': 'Take Your Time',
     'wfm': 'Works For Me',
-    'wtf': 'What The F**k'
+    'wtf': 'What The F**k',
 };
 app.get("/", function (req, res) {
     res.send("hey ya!!");
@@ -82,8 +82,8 @@ catch (e) {
     console.error("can't load credentials: ", e);
     process.exit(-1);
 }
-var storage = new Storage_1["default"](__dirname + "/..");
-var bh = new Rusty_1["default"](storage)
+var storage = new Storage_1.default(__dirname + "/..");
+var bh = new Rusty_1.default(storage)
     .installForWebServer(app, credentials)
     .onSlashCommand('/slang', function (ch, command, text) {
     if (command === '/slang') {
@@ -164,11 +164,11 @@ var bh = new Rusty_1["default"](storage)
                         }) + "*",
                         fallback: "",
                         color: '#209020',
-                        pretext: "Selected 3 as option"
+                        pretext: "Selected 3 as option",
                     }
                 ], true, false);
             }
-        }
+        },
     };
     var interactive_2 = {
         ephemeral: true,
@@ -182,7 +182,7 @@ var bh = new Rusty_1["default"](storage)
                         }) + "*",
                         fallback: "",
                         color: '#902090',
-                        pretext: "JAJEJO"
+                        pretext: "JAJEJO",
                     }
                 ], false, true);
             }
@@ -259,3 +259,4 @@ function slangVerb(words) {
     }
     return { rightStr: rightStr, wrongStr: wrongStr };
 }
+//# sourceMappingURL=web.js.map

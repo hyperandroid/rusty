@@ -4,7 +4,7 @@
  * Sets oauth and events endpoints
  *
  */
-exports.__esModule = true;
+Object.defineProperty(exports, "__esModule", { value: true });
 var ConversationHelper_1 = require("./ConversationHelper");
 var api_1 = require("./api");
 var events_1 = require("events");
@@ -17,7 +17,7 @@ function testAuth(auth_token, callback) {
     }, callback);
 }
 var interactiveMap = {};
-var Rusty = (function () {
+var Rusty = /** @class */ (function () {
     function Rusty(storage) {
         this.slashCommands = {};
         this.events = {};
@@ -189,7 +189,7 @@ var Rusty = (function () {
                     var ic = new ConversationHelper_1.InteractiveConversationHelper(this, user, team, eres, body, callback_id);
                     ch(ic, body.actions);
                     // might not be executed.
-                    ic.respond(200, '');
+                    ic.__respond(200, '');
                     return;
                 }
             }
@@ -263,7 +263,7 @@ var Rusty = (function () {
             var team = this.storage.getTeam(body.team_id);
             var hc = new ConversationHelper_1.ConversationHelper(this, user, team, res, body);
             commandCallback(hc, body.command, body.text);
-            hc.respond(200, '');
+            hc.__respond(200, '');
         }
         else {
             res.status(500).send("unknown slash command " + body.command);
@@ -337,4 +337,5 @@ var Rusty = (function () {
     };
     return Rusty;
 }());
-exports["default"] = Rusty;
+exports.default = Rusty;
+//# sourceMappingURL=Rusty.js.map

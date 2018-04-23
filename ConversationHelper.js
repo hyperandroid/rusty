@@ -9,10 +9,10 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
-Object.defineProperty(exports, "__esModule", { value: true });
+exports.__esModule = true;
 var request = require("request");
 var process = require("process");
-var ConversationHelper = /** @class */ (function () {
+var ConversationHelper = (function () {
     function ConversationHelper(bh, user, team, response, body) {
         this.responded = false;
         this.bh = bh;
@@ -40,7 +40,7 @@ var ConversationHelper = /** @class */ (function () {
         var form = {
             token: token,
             channel: channel,
-            text: message,
+            text: message
         };
         if (ephemeral) {
             form.user = this.user.id;
@@ -150,7 +150,7 @@ var ConversationHelper = /** @class */ (function () {
             hexNum.substr(16, 4) + '-' +
             hexNum.substr(20);
     };
-    ConversationHelper.prototype.respond = function (code, message) {
+    ConversationHelper.prototype.__respond = function (code, message) {
         if (this.responded) {
             return;
         }
@@ -160,7 +160,7 @@ var ConversationHelper = /** @class */ (function () {
     return ConversationHelper;
 }());
 exports.ConversationHelper = ConversationHelper;
-var InteractiveConversationHelper = /** @class */ (function (_super) {
+var InteractiveConversationHelper = (function (_super) {
     __extends(InteractiveConversationHelper, _super);
     function InteractiveConversationHelper(bh, user, team, response, body, callback_id) {
         var _this = _super.call(this, bh, user, team, response, body) || this;
@@ -223,7 +223,7 @@ var InteractiveConversationHelper = /** @class */ (function (_super) {
         console.log('updating message : ' + ts);
         if (typeof attachments !== 'undefined') {
             var res = {
-                replace_original: replaceOriginal,
+                replace_original: replaceOriginal
             };
             if (typeof attachments === 'string') {
                 res.text = attachments;
@@ -234,10 +234,9 @@ var InteractiveConversationHelper = /** @class */ (function (_super) {
             if (ephemeral) {
                 res.response_type = "ephemeral";
             }
-            this.respond(200, res);
+            this.__respond(200, res);
         }
     };
     return InteractiveConversationHelper;
 }(ConversationHelper));
 exports.InteractiveConversationHelper = InteractiveConversationHelper;
-//# sourceMappingURL=ConversationHelper.js.map

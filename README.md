@@ -2,6 +2,13 @@
 
 A minimalistic slack bot (currently only a WebBot).
 
+Rusty will assist at defining handlers for
++ slash commands
++ events
++ interactive conversations
+
+and also to be able to publish to channels by using web hooks.
+
 Rusty relies on Express to set bot end points.
 
 ## Simplest example
@@ -23,8 +30,10 @@ app.listen(8123, function () {
     console.log("App listening on port " + PORT);
 });
 
+const storage = new StorageImpl(__dirname+"/..");
+
 // create a Rusty instance.
-const bh = new Rusty()
+const bh = new Rusty(storage)
     .installForWebServer(app, credentials)
     .onSlashCommand(
         '/slang',
@@ -36,6 +45,12 @@ const bh = new Rusty()
             }
         });
 ```
+
+We can see 3 elements to have the example working:
+
++ An express app to be able to respond and secure web requests.
++ An object to keep track of teams and users credentials/tokens
++ A Rusty instance. Rusty will route a convenient object to interact with slack for each registered action type. 
 
 ## Configuration
 
@@ -82,3 +97,68 @@ the slack workspace authorizing the app, and a `User` for the user in that works
 It is important you keep these two safe since they contain sensitive auth codes to interact with your bot.
 
 These data is insecurely handled by the `Store` object, which just saves it to a file. 
+
+## Defining slash commands
+
+First of all, define expected slash command for your slap app in Slack's app `Slash Commands` option.
+The supplied `request url` for the command, must match the `end_point` defined in Runsty's `Web` configuration. 
+
+Defining commands is as easy as calling `Rusty` instance's 
+`onSlashCommand( commands_: string|string[], callback: SlashCommandCallback )` like:
+
+`rusty.onSlashCommand('slang', (conversation_helper, command, text) => { ... } );`
+
+each time a user types `/slang blah blah`, this callback will be invoked.
+You can defined many slash commands for the same callback handler, or chain as much as needed calls to `onSlashCommand` e.g.:
+
+```
+    rusty
+        .onSlashCommand('slang',  (conversation_helper, command, text) => { ... } )
+        .onSlashCommand('slang2', (conversation_helper, command, text) => { ... } )
+        .onSlashCommand('slang3', (conversation_helper, command, text) => { ... } );
+```
+
+The `conversation_helper` is a convenient object to interact with slack. For example, sending a request back to the
+user who invoked the `/slang` slash command would be as easy as:
+
+`conversation_helper.reply('got your text:' + text);`
+
+See [ConversationHelper](##ConsersationHelper) for more info on what conversation helper object can do. 
+
+## Defining Events
+
+Events are mentions to your bot user in a given slack workspace. 
+They are defined in an easy manner with different semantics than slash commands.
+
+Events expect to parse a regular expression to be matched by your bot. The scope where these regulars expressions are 
+matcher, are supplied as construction parameters. This makes sense, since you might want to act differently to the same
+string pattern in different application scopes.
+
+An event is defined as:
+
+```
+    rusty.onEvent(
+        ['test(.*)'],
+        ['direct_mention','mention','app_mention'],
+        (ch:ConversationHelper, event:string, heard:HearInfo ) => {
+            ...
+        });
+```
+
+First parameter is an array of patterns that you want be recognized to fire this event.
+For example, in this case, a mention of the form `@youbot test abcd 1234` will fire this event's callback.
+The callback will receive a [ConversationHelper](##ConversationHelper) as slash commands, but also the matched `event` 
+string, as well as the regular expression matching info.
+
+For this example, the way to send a response with what was typed after text could be:
+`conversation_handler.reply(heard.matches[1]);`.
+
+## ConsersationHelper
+
+### Publishing content on channels
+
+### Responding to events or slash commands
+
+### Interactive conversations
+
+## InteractiveConversationHelper

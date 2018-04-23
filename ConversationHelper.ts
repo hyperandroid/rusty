@@ -65,7 +65,6 @@ export interface InteractiveOptions {
     on : InteractiveCallbackMap;
 }
 
-
 export class ConversationHelper {
 
     protected bh : BotHandler;
@@ -247,7 +246,7 @@ export class ConversationHelper {
             hexNum.substr(20);
     }
 
-    respond( code:number, message:any ) {
+    __respond( code:number, message:any ) {
         if ( this.responded ) {
             return;
         }
@@ -338,7 +337,7 @@ export class InteractiveConversationHelper extends ConversationHelper {
                 res.response_type= "ephemeral";
             }
 
-            this.respond(200, res);
+            this.__respond(200, res);
         }
     }
 }

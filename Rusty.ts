@@ -320,7 +320,7 @@ export default class Rusty {
                     ch(ic, body.actions );
 
                     // might not be executed.
-                    ic.respond(200,'');
+                    ic.__respond(200,'');
 
                     return;
                 }
@@ -419,7 +419,7 @@ export default class Rusty {
 
             const hc = new ConversationHelper(this, user, team ,res, body);
             commandCallback( hc, body.command, body.text );
-            hc.respond(200,'');
+            hc.__respond(200,'');
         } else {
             res.status(500).send( `unknown slash command ${body.command}` );
         }
