@@ -75,7 +75,7 @@ export interface HearInfo {
 
 export type SlashCommandCallback = (ch:ConversationHelper, command:string, text:string) => void;
 
-export type EventCallback = (ch:ConversationHelper, event:string, heard: HearInfo ) => void;
+export type EventCallback = (ch:ConversationHelper, heard: HearInfo ) => void;
 
 export interface InteractiveAction {
     name : string;
@@ -389,8 +389,21 @@ export default class Rusty {
         const eventPatterns = this.events[event];
         if ( typeof eventPatterns!=='undefined' ) {
 
-            const user= this.storage.getUser(body.event.user);
             const team= this.storage.getTeam(body.team_id);
+            let user : User = this.storage.getUser(body.event.user);
+            // user not in db.
+            // create a user descriptor.
+            if ( user===null ) {
+                user= {
+                    id : body.event.user,
+                    user : '',
+                    access_token : body.token,
+                    team_id : body.team_id,
+                    scopes: []
+                };
+
+                // could check users.identity to get user.name !!
+            }
 
             eventPatterns.forEach( pattern => {
 
@@ -399,7 +412,6 @@ export default class Rusty {
                     const hc = new ConversationHelper(this, user, team, eres, body );
                     pattern.callback(
                         hc,
-                        text,
                         {
                             matches : res,
                             message : text
@@ -414,8 +426,20 @@ export default class Rusty {
         const commandCallback = this.slashCommands[body.command];
         if ( typeof commandCallback!=='undefined' ) {
 
-            const user= this.storage.getUser(body.user_id);
             const team= this.storage.getTeam(body.team_id);
+            let user : User = this.storage.getUser(body.user_id);
+
+            // user not in db.
+            // create a user descriptor.
+            if ( user===null ) {
+                user= {
+                    id : body.user_id,
+                    user : body.user_name,
+                    access_token : body.token,
+                    team_id : body.team_id,
+                    scopes: []
+                }
+            }
 
             const hc = new ConversationHelper(this, user, team ,res, body);
             commandCallback( hc, body.command, body.text );

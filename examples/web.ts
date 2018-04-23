@@ -86,6 +86,20 @@ try {
     process.exit(-1);
 }
 
+
+function RandomCallbackUUID() {
+    let b= Buffer.alloc(16);
+    b.writeDoubleBE( process.hrtime()[1], 0 );
+    b.writeDoubleBE( process.hrtime()[1], 8 );
+    const hexNum = b.toString('hex');
+    return hexNum.substr(0, 8) + '-' +
+        hexNum.substr(8, 4) + '-' +
+        hexNum.substr(12, 4) + '-' +
+        hexNum.substr(16, 4) + '-' +
+        hexNum.substr(20);
+}
+
+
 const storage = new StorageImpl(__dirname+"/..");
 
 const bh = new Rusty(storage)
@@ -127,14 +141,14 @@ const bh = new Rusty(storage)
     .onEvent(
         ['hey (.*)'],
         ['direct_message', 'direct_mention', 'mention', 'app_mention'],
-        ( ch: ConversationHelper, event:string, heard:HearInfo ) => {
+        ( ch: ConversationHelper, heard:HearInfo ) => {
             ch.reply(heard.matches[1]);
             ch.sendToIncomingWebHook('lololol');
         })
     .onEvent(
         ['test(.*)'],
         ['direct_mention','mention','app_mention'],
-        (ch:ConversationHelper, event:string, heard:HearInfo ) => {
+        (ch:ConversationHelper, heard:HearInfo ) => {
 
             const interactive_1 = {
                 ephemeral: true,
@@ -142,7 +156,7 @@ const bh = new Rusty(storage)
                     {
                         title: 'Message 1',
                         fallback: 'Message 1',
-                        callback_id: ConversationHelper.RandomCallbackUUID(),
+                        callback_id: RandomCallbackUUID(),
                         attachment_type: 'default',
                         actions: [
                             {
@@ -213,7 +227,7 @@ const bh = new Rusty(storage)
                     {
                         title: 'Message 2',
                         fallback: 'message 2',
-                        callback_id: ConversationHelper.RandomCallbackUUID(),
+                        callback_id: RandomCallbackUUID(),
                         attachment_type: 'default',
                         actions: [
                             {
@@ -240,7 +254,7 @@ const bh = new Rusty(storage)
                     {
                         title: 'Message 3',
                         fallback: 'message 3',
-                        callback_id: ConversationHelper.RandomCallbackUUID(),
+                        callback_id: RandomCallbackUUID(),
                         attachment_type: 'default',
                         actions: [
                             {

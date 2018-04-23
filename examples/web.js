@@ -3,7 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var express = require("express");
 var bodyParser = require("body-parser");
 var Rusty_1 = require("../Rusty");
-var ConversationHelper_1 = require("../ConversationHelper");
 var fs = require("fs");
 var Storage_1 = require("../storage/Storage");
 var app = express();
@@ -82,6 +81,17 @@ catch (e) {
     console.error("can't load credentials: ", e);
     process.exit(-1);
 }
+function RandomCallbackUUID() {
+    var b = Buffer.alloc(16);
+    b.writeDoubleBE(process.hrtime()[1], 0);
+    b.writeDoubleBE(process.hrtime()[1], 8);
+    var hexNum = b.toString('hex');
+    return hexNum.substr(0, 8) + '-' +
+        hexNum.substr(8, 4) + '-' +
+        hexNum.substr(12, 4) + '-' +
+        hexNum.substr(16, 4) + '-' +
+        hexNum.substr(20);
+}
 var storage = new Storage_1.default(__dirname + "/..");
 var bh = new Rusty_1.default(storage)
     .installForWebServer(app, credentials)
@@ -113,18 +123,18 @@ var bh = new Rusty_1.default(storage)
         ch.reply('unknown command', null, true);
     }
 })
-    .onEvent(['hey (.*)'], ['direct_message', 'direct_mention', 'mention', 'app_mention'], function (ch, event, heard) {
+    .onEvent(['hey (.*)'], ['direct_message', 'direct_mention', 'mention', 'app_mention'], function (ch, heard) {
     ch.reply(heard.matches[1]);
     ch.sendToIncomingWebHook('lololol');
 })
-    .onEvent(['test(.*)'], ['direct_mention', 'mention', 'app_mention'], function (ch, event, heard) {
+    .onEvent(['test(.*)'], ['direct_mention', 'mention', 'app_mention'], function (ch, heard) {
     var interactive_1 = {
         ephemeral: true,
         attachments: [
             {
                 title: 'Message 1',
                 fallback: 'Message 1',
-                callback_id: ConversationHelper_1.ConversationHelper.RandomCallbackUUID(),
+                callback_id: RandomCallbackUUID(),
                 attachment_type: 'default',
                 actions: [
                     {
@@ -191,7 +201,7 @@ var bh = new Rusty_1.default(storage)
             {
                 title: 'Message 2',
                 fallback: 'message 2',
-                callback_id: ConversationHelper_1.ConversationHelper.RandomCallbackUUID(),
+                callback_id: RandomCallbackUUID(),
                 attachment_type: 'default',
                 actions: [
                     {
@@ -216,7 +226,7 @@ var bh = new Rusty_1.default(storage)
             {
                 title: 'Message 3',
                 fallback: 'message 3',
-                callback_id: ConversationHelper_1.ConversationHelper.RandomCallbackUUID(),
+                callback_id: RandomCallbackUUID(),
                 attachment_type: 'default',
                 actions: [
                     {

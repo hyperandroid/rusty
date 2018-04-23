@@ -140,24 +140,37 @@ An event is defined as:
     rusty.onEvent(
         ['test(.*)'],
         ['direct_mention','mention','app_mention'],
-        (ch:ConversationHelper, event:string, heard:HearInfo ) => {
+        (ch:ConversationHelper, heard:HearInfo ) => {
             ...
         });
 ```
 
 First parameter is an array of patterns that you want be recognized to fire this event.
 For example, in this case, a mention of the form `@youbot test abcd 1234` will fire this event's callback.
-The callback will receive a [ConversationHelper](##ConversationHelper) as slash commands, but also the matched `event` 
-string, as well as the regular expression matching info.
+The callback will receive a [ConversationHelper](##ConversationHelper) as slash commands, but also the event regular 
+expression matching info.
 
 For this example, the way to send a response with what was typed after text could be:
 `conversation_handler.reply(heard.matches[1]);`.
 
 ## ConsersationHelper
 
+This object is received as callback parameters. It is a fancy way of interacting with slack bot based on
+received requests, like slash commands and events.
+
 ### Publishing content on channels
 
+If you slack app defined `Incoming Webhooks`, before installing it in a slack workspace, an incoming web hook channel
+must be supplied. This generates a webhook url, that is collected as part of the `Team` information received on 
+the `oauth` step.
+
+Your bot can post information to this channel just by calling `conversation_helper.sendToIncomingWebHook` method.
+
+Note this method does not send a reply to any request, it just posts content to an authorized incoming webhook.
+
 ### Responding to events or slash commands
+
+
 
 ### Interactive conversations
 

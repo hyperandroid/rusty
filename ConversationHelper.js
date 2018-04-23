@@ -9,10 +9,9 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
-exports.__esModule = true;
+Object.defineProperty(exports, "__esModule", { value: true });
 var request = require("request");
-var process = require("process");
-var ConversationHelper = (function () {
+var ConversationHelper = /** @class */ (function () {
     function ConversationHelper(bh, user, team, response, body) {
         this.responded = false;
         this.bh = bh;
@@ -40,7 +39,7 @@ var ConversationHelper = (function () {
         var form = {
             token: token,
             channel: channel,
-            text: message
+            text: message,
         };
         if (ephemeral) {
             form.user = this.user.id;
@@ -139,17 +138,6 @@ var ConversationHelper = (function () {
         else
             console.error('Interactive w/o callback_id on attachments.');
     };
-    ConversationHelper.RandomCallbackUUID = function () {
-        var b = Buffer.alloc(16);
-        b.writeDoubleBE(process.hrtime()[1], 0);
-        b.writeDoubleBE(process.hrtime()[1], 8);
-        var hexNum = b.toString('hex');
-        return hexNum.substr(0, 8) + '-' +
-            hexNum.substr(8, 4) + '-' +
-            hexNum.substr(12, 4) + '-' +
-            hexNum.substr(16, 4) + '-' +
-            hexNum.substr(20);
-    };
     ConversationHelper.prototype.__respond = function (code, message) {
         if (this.responded) {
             return;
@@ -160,7 +148,7 @@ var ConversationHelper = (function () {
     return ConversationHelper;
 }());
 exports.ConversationHelper = ConversationHelper;
-var InteractiveConversationHelper = (function (_super) {
+var InteractiveConversationHelper = /** @class */ (function (_super) {
     __extends(InteractiveConversationHelper, _super);
     function InteractiveConversationHelper(bh, user, team, response, body, callback_id) {
         var _this = _super.call(this, bh, user, team, response, body) || this;
@@ -223,7 +211,7 @@ var InteractiveConversationHelper = (function (_super) {
         console.log('updating message : ' + ts);
         if (typeof attachments !== 'undefined') {
             var res = {
-                replace_original: replaceOriginal
+                replace_original: replaceOriginal,
             };
             if (typeof attachments === 'string') {
                 res.text = attachments;
@@ -240,3 +228,4 @@ var InteractiveConversationHelper = (function (_super) {
     return InteractiveConversationHelper;
 }(ConversationHelper));
 exports.InteractiveConversationHelper = InteractiveConversationHelper;
+//# sourceMappingURL=ConversationHelper.js.map

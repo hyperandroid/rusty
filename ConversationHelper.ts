@@ -234,18 +234,6 @@ export class ConversationHelper {
 
     }
 
-    static RandomCallbackUUID() {
-        let b= Buffer.alloc(16);
-        b.writeDoubleBE( process.hrtime()[1], 0 );
-        b.writeDoubleBE( process.hrtime()[1], 8 );
-        const hexNum = b.toString('hex');
-        return hexNum.substr(0, 8) + '-' +
-            hexNum.substr(8, 4) + '-' +
-            hexNum.substr(12, 4) + '-' +
-            hexNum.substr(16, 4) + '-' +
-            hexNum.substr(20);
-    }
-
     __respond( code:number, message:any ) {
         if ( this.responded ) {
             return;

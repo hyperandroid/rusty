@@ -4,7 +4,7 @@
  * Sets oauth and events endpoints
  *
  */
-Object.defineProperty(exports, "__esModule", { value: true });
+exports.__esModule = true;
 var ConversationHelper_1 = require("./ConversationHelper");
 var api_1 = require("./api");
 var events_1 = require("events");
@@ -17,7 +17,7 @@ function testAuth(auth_token, callback) {
     }, callback);
 }
 var interactiveMap = {};
-var Rusty = /** @class */ (function () {
+var Rusty = (function () {
     function Rusty(storage) {
         this.slashCommands = {};
         this.events = {};
@@ -242,13 +242,25 @@ var Rusty = /** @class */ (function () {
         body.channel_id = body.event.channel;
         var eventPatterns = this.events[event];
         if (typeof eventPatterns !== 'undefined') {
-            var user_1 = this.storage.getUser(body.event.user);
             var team_1 = this.storage.getTeam(body.team_id);
+            var user_1 = this.storage.getUser(body.event.user);
+            // user not in db.
+            // create a user descriptor.
+            if (user_1 === null) {
+                user_1 = {
+                    id: body.event.user,
+                    user: '',
+                    access_token: body.token,
+                    team_id: body.team_id,
+                    scopes: []
+                };
+                // could check users.identity to get user.name !!
+            }
             eventPatterns.forEach(function (pattern) {
                 var res = pattern.re.exec(text);
                 if (res !== null && res.length >= 1) {
                     var hc = new ConversationHelper_1.ConversationHelper(_this, user_1, team_1, eres, body);
-                    pattern.callback(hc, text, {
+                    pattern.callback(hc, {
                         matches: res,
                         message: text
                     });
@@ -259,8 +271,19 @@ var Rusty = /** @class */ (function () {
     Rusty.prototype.__handleSlashCommand = function (body, res) {
         var commandCallback = this.slashCommands[body.command];
         if (typeof commandCallback !== 'undefined') {
-            var user = this.storage.getUser(body.user_id);
             var team = this.storage.getTeam(body.team_id);
+            var user = this.storage.getUser(body.user_id);
+            // user not in db.
+            // create a user descriptor.
+            if (user === null) {
+                user = {
+                    id: body.user_id,
+                    user: body.user_name,
+                    access_token: body.token,
+                    team_id: body.team_id,
+                    scopes: []
+                };
+            }
             var hc = new ConversationHelper_1.ConversationHelper(this, user, team, res, body);
             commandCallback(hc, body.command, body.text);
             hc.__respond(200, '');
@@ -337,5 +360,4 @@ var Rusty = /** @class */ (function () {
     };
     return Rusty;
 }());
-exports.default = Rusty;
-//# sourceMappingURL=Rusty.js.map
+exports["default"] = Rusty;
