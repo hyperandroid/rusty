@@ -2,13 +2,15 @@
  * Bot handler does the dirty lifting with bot providers.
  * Sets oauth and events endpoints
  *
- * bugbug: It uses an Express server instance.
  */
 
 import express = require("express");
-import request = require("request");
 import {ConversationHelper, InteractiveConversationHelper} from "./ConversationHelper";
-import fs = require("fs");
+import {Team, TeamIncomingWebHook} from "./storage/Team";
+import {User} from "./storage/User";
+import {APICallback, clientAPI} from "./api";
+import Storage from "./storage/Storage";
+import {EventEmitter} from "events";
 
 export interface OAuthProperties {
     client_id       : string;
@@ -25,40 +27,6 @@ export interface HandlerProperties {
     OAuth : OAuthProperties;
     Web : WebAuthProperties;
 }
-
-export interface Bot {
-    access_token: string;
-    user_id: string;
-    created_by: string;
-    app_token: string;
-    name?: string;      // bot name.
-}
-
-export interface Team {
-    id : string;
-    name : string;
-    created_by : string;
-    url : string;
-    bot? : Bot;
-    incoming_web_hook? : TeamIncomingWebHook;
-}
-
-export interface TeamIncomingWebHook {
-    token : string;
-    createdBy : string;
-    url : string;
-    channel : string;
-    configuration_url : string;
-}
-
-export interface User {
-    id : string;
-    team_id : string;
-    user: string;
-    access_token : string;
-    scopes : string[];
-}
-
 
 interface IncomingWebHookAuthResponse {
     url                 : string;
@@ -100,17 +68,10 @@ interface BotAuthResponse {
     bot_user_id     : string;
 }
 
-interface APIParams {
-    form : any;
-    method : string;
-}
-
 export interface HearInfo {
     message : string;           // original message
     matches : string[];         // reg exp matched info.
 }
-
-export type APICallback<T> = (error:Error, data:T) => void;
 
 export type SlashCommandCallback = (ch:ConversationHelper, command:string, text:string) => void;
 
@@ -123,22 +84,6 @@ export interface InteractiveAction {
 }
 
 export type InteractiveCallback = (ch:InteractiveConversationHelper, responses:InteractiveAction[] ) => void;
-
-function clientAPI<T>( endPoint:string, params:APIParams, callback : APICallback<T>) {
-
-    request(
-        {
-            url: 'https://slack.com/api/' + endPoint,
-            form: params.form,
-            method: params.method
-        }, function (error: any, response: request.Response, body: any) {
-            if (response.statusCode === 200) {
-                callback( null, JSON.parse(body) as T);
-            } else {
-                callback( error, null );
-            }
-        });
-}
 
 function testAuth<T>( auth_token : string, callback : APICallback<T> ) {
 
@@ -153,9 +98,6 @@ function testAuth<T>( auth_token : string, callback : APICallback<T> ) {
         callback );
 }
 
-type TeamsMap = {[key:string]:Team};
-type UserMap = {[key:string]:User};
-
 type InteractiveRequestMap = {[key:string]:InteractiveCallback};
 type UserInteractiveRequestMap = {[key:string]:InteractiveRequestMap};
 
@@ -165,19 +107,21 @@ interface EventPattern {
     pattern : string;
 }
 
-let usersMap : UserMap = {};
-let teamsMap : TeamsMap = {};
 let interactiveMap : UserInteractiveRequestMap = {};
 
-export default class BotHandler {
+export default class Rusty {
 
     private app : express.Express;
 
+    private storage : Storage;
     private slashCommands : {[key:string]:SlashCommandCallback} = {};
     private events : {[key:string]:EventPattern[]} = {};
 
-    constructor() {
-        this.__loadCredentials();
+    private userEmitter : EventEmitter = new EventEmitter();
+    private teamEmitter : EventEmitter = new EventEmitter();
+
+    constructor( storage : Storage ) {
+        this.storage= storage;
     }
 
     installForWebServer( app: express.Express, props: HandlerProperties ) {
@@ -187,27 +131,6 @@ export default class BotHandler {
         this.__initializeEventsAndSlashCommands( props.Web );
 
         return this;
-    }
-
-    __saveCredentials() {
-        fs.writeFileSync( __dirname+"/users.json", JSON.stringify(usersMap,null,2) );
-        fs.writeFileSync( __dirname+"/teams.json", JSON.stringify(teamsMap,null,2) );
-    }
-
-    __loadCredentials() {
-        try {
-            const um = JSON.parse(fs.readFileSync(__dirname + "/users.json").toString());
-            usersMap = um as UserMap;
-        } catch(e) {
-            console.info("Can't read users file.");
-        }
-
-        try {
-            const tm = JSON.parse( fs.readFileSync( __dirname+"/teams.json" ).toString());
-            teamsMap =tm as TeamsMap;
-        } catch(e) {
-            console.info("Can't read teams file.");
-        }
     }
 
     __initializeOAuth( oauthProps : OAuthProperties ) {
@@ -289,10 +212,8 @@ export default class BotHandler {
                                         access_token : auth.access_token
                                     };
 
-                                    usersMap[user.id] = user;
-                                    teamsMap[team.id] = team;
-
-                                    this.__saveCredentials();
+                                    this.userEmitter.emit('user', user);
+                                    this.teamEmitter.emit('team', team);
 
                                 } else {
                                     isError = true;
@@ -377,7 +298,7 @@ export default class BotHandler {
         // normalize
         body.channel_id = body.channel.id;
 
-        const team= teamsMap[team_id];
+        const team= this.storage.getTeam(team_id);
         // build user out of message info.
         let user = {
             id: body.user.id,
@@ -468,8 +389,8 @@ export default class BotHandler {
         const eventPatterns = this.events[event];
         if ( typeof eventPatterns!=='undefined' ) {
 
-            const user= usersMap[body.event.user];
-            const team= teamsMap[body.team_id];
+            const user= this.storage.getUser(body.event.user);
+            const team= this.storage.getTeam(body.team_id);
 
             eventPatterns.forEach( pattern => {
 
@@ -493,8 +414,8 @@ export default class BotHandler {
         const commandCallback = this.slashCommands[body.command];
         if ( typeof commandCallback!=='undefined' ) {
 
-            const user= usersMap[body.user_id];
-            const team= teamsMap[body.team_id];
+            const user= this.storage.getUser(body.user_id);
+            const team= this.storage.getTeam(body.team_id);
 
             const hc = new ConversationHelper(this, user, team ,res, body);
             commandCallback( hc, body.command, body.text );
@@ -556,7 +477,7 @@ export default class BotHandler {
         return this;
     }
 
-    registerInteractiveRequest( user_id : string, callback_id : string, ts : string, callback:InteractiveCallback ) {
+    __registerInteractiveRequest( user_id : string, callback_id : string, ts : string, callback:InteractiveCallback ) {
 
         let user = interactiveMap[user_id];
         if ( typeof user==='undefined' ) {
@@ -567,7 +488,7 @@ export default class BotHandler {
         user[callback_id] = callback;
     }
 
-    unregisterInteractiveRequest( user_id: string, callback_id: string ) {
+    __unregisterInteractiveRequest( user_id: string, callback_id: string ) {
         try {
             const ip = interactiveMap[user_id][callback_id];
             interactiveMap[user_id][callback_id] = undefined;

@@ -2,6 +2,5 @@ teams.json
 users.json
 credentials.json
 node_modules
-**/*.map
 .idea
 package-lock.json

@@ -3,70 +3,35 @@
  * Bot handler does the dirty lifting with bot providers.
  * Sets oauth and events endpoints
  *
- * bugbug: It uses an Express server instance.
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-var request = require("request");
+exports.__esModule = true;
 var ConversationHelper_1 = require("./ConversationHelper");
-var fs = require("fs");
-function clientAPI(endPoint, params, callback) {
-    request({
-        url: 'https://slack.com/api/' + endPoint,
-        form: params.form,
-        method: params.method
-    }, function (error, response, body) {
-        if (response.statusCode === 200) {
-            callback(null, JSON.parse(body));
-        }
-        else {
-            callback(error, null);
-        }
-    });
-}
+var api_1 = require("./api");
+var events_1 = require("events");
 function testAuth(auth_token, callback) {
-    clientAPI('auth.test', {
+    api_1.clientAPI('auth.test', {
         form: {
             token: auth_token
         },
         method: 'POST'
     }, callback);
 }
-var usersMap = {};
-var teamsMap = {};
 var interactiveMap = {};
-var BotHandler = /** @class */ (function () {
-    function BotHandler() {
+var Rusty = (function () {
+    function Rusty(storage) {
         this.slashCommands = {};
         this.events = {};
-        this.__loadCredentials();
+        this.userEmitter = new events_1.EventEmitter();
+        this.teamEmitter = new events_1.EventEmitter();
+        this.storage = storage;
     }
-    BotHandler.prototype.installForWebServer = function (app, props) {
+    Rusty.prototype.installForWebServer = function (app, props) {
         this.app = app;
         this.__initializeOAuth(props.OAuth);
         this.__initializeEventsAndSlashCommands(props.Web);
         return this;
     };
-    BotHandler.prototype.__saveCredentials = function () {
-        fs.writeFileSync(__dirname + "/users.json", JSON.stringify(usersMap, null, 2));
-        fs.writeFileSync(__dirname + "/teams.json", JSON.stringify(teamsMap, null, 2));
-    };
-    BotHandler.prototype.__loadCredentials = function () {
-        try {
-            var um = JSON.parse(fs.readFileSync(__dirname + "/users.json").toString());
-            usersMap = um;
-        }
-        catch (e) {
-            console.info("Can't read users file.");
-        }
-        try {
-            var tm = JSON.parse(fs.readFileSync(__dirname + "/teams.json").toString());
-            teamsMap = tm;
-        }
-        catch (e) {
-            console.info("Can't read teams file.");
-        }
-    };
-    BotHandler.prototype.__initializeOAuth = function (oauthProps) {
+    Rusty.prototype.__initializeOAuth = function (oauthProps) {
         var _this = this;
         var end_point = "/oauth";
         if (typeof oauthProps.end_point !== 'undefined') {
@@ -80,7 +45,7 @@ var BotHandler = /** @class */ (function () {
                 console.error("Error in bot oauth.");
             }
             else {
-                clientAPI('oauth.access', {
+                api_1.clientAPI('oauth.access', {
                     form: {
                         code: req.query.code,
                         client_id: oauthProps.client_id,
@@ -129,9 +94,8 @@ var BotHandler = /** @class */ (function () {
                                     scopes: auth.scope.split(/\,/),
                                     access_token: auth.access_token
                                 };
-                                usersMap[user.id] = user;
-                                teamsMap[team.id] = team;
-                                _this.__saveCredentials();
+                                _this.userEmitter.emit('user', user);
+                                _this.teamEmitter.emit('team', team);
                             }
                             else {
                                 isError = true;
@@ -148,7 +112,7 @@ var BotHandler = /** @class */ (function () {
             }
         });
     };
-    BotHandler.prototype.__initializeEventsAndSlashCommands = function (webProps) {
+    Rusty.prototype.__initializeEventsAndSlashCommands = function (webProps) {
         var _this = this;
         var end_point = "/event";
         if (typeof webProps.end_point !== 'undefined') {
@@ -196,17 +160,17 @@ var BotHandler = /** @class */ (function () {
             }
         });
     };
-    BotHandler.prototype.__handleUnknown = function (body, eres) {
+    Rusty.prototype.__handleUnknown = function (body, eres) {
         console.log('unknown', body);
         eres.status(200).send('');
     };
-    BotHandler.prototype.__handleInteractiveEvent = function (body, eres) {
+    Rusty.prototype.__handleInteractiveEvent = function (body, eres) {
         var user_id = body.user.id;
         var team_id = body.team.id;
         var callback_id = body.callback_id;
         // normalize
         body.channel_id = body.channel.id;
-        var team = teamsMap[team_id];
+        var team = this.storage.getTeam(team_id);
         // build user out of message info.
         var user = {
             id: body.user.id,
@@ -238,11 +202,11 @@ var BotHandler = /** @class */ (function () {
         var msg = new ConversationHelper_1.ConversationHelper(this, user, team, eres, body);
         msg.reply("This conversation branch has ended before.", undefined, true);
     };
-    BotHandler.prototype.__handleMessageCallback = function (body, eres) {
+    Rusty.prototype.__handleMessageCallback = function (body, eres) {
         console.log('message callback', body);
         eres.status(200).send('');
     };
-    BotHandler.prototype.__secureEventsAndSlashCommands = function (end_point, tokens) {
+    Rusty.prototype.__secureEventsAndSlashCommands = function (end_point, tokens) {
         this.app.use(end_point, function authenticate(req, res, next) {
             var token = null;
             // find an auth token.
@@ -268,7 +232,7 @@ var BotHandler = /** @class */ (function () {
             next();
         });
     };
-    BotHandler.prototype.__handleEvent = function (body, eres) {
+    Rusty.prototype.__handleEvent = function (body, eres) {
         var _this = this;
         // ok, event started.
         eres.status(200).send('');
@@ -278,8 +242,8 @@ var BotHandler = /** @class */ (function () {
         body.channel_id = body.event.channel;
         var eventPatterns = this.events[event];
         if (typeof eventPatterns !== 'undefined') {
-            var user_1 = usersMap[body.event.user];
-            var team_1 = teamsMap[body.team_id];
+            var user_1 = this.storage.getUser(body.event.user);
+            var team_1 = this.storage.getTeam(body.team_id);
             eventPatterns.forEach(function (pattern) {
                 var res = pattern.re.exec(text);
                 if (res !== null && res.length >= 1) {
@@ -292,11 +256,11 @@ var BotHandler = /** @class */ (function () {
             });
         }
     };
-    BotHandler.prototype.__handleSlashCommand = function (body, res) {
+    Rusty.prototype.__handleSlashCommand = function (body, res) {
         var commandCallback = this.slashCommands[body.command];
         if (typeof commandCallback !== 'undefined') {
-            var user = usersMap[body.user_id];
-            var team = teamsMap[body.team_id];
+            var user = this.storage.getUser(body.user_id);
+            var team = this.storage.getTeam(body.team_id);
             var hc = new ConversationHelper_1.ConversationHelper(this, user, team, res, body);
             commandCallback(hc, body.command, body.text);
             hc.respond(200, '');
@@ -305,7 +269,7 @@ var BotHandler = /** @class */ (function () {
             res.status(500).send("unknown slash command " + body.command);
         }
     };
-    BotHandler.prototype.onSlashCommand = function (commands_, callback) {
+    Rusty.prototype.onSlashCommand = function (commands_, callback) {
         var _this = this;
         var commands;
         if (typeof commands_ === 'string') {
@@ -319,7 +283,7 @@ var BotHandler = /** @class */ (function () {
         });
         return this;
     };
-    BotHandler.prototype.onEvent = function (hear_, events_, callback) {
+    Rusty.prototype.onEvent = function (hear_, events_, callback) {
         var _this = this;
         var events;
         if (typeof events_ === 'string') {
@@ -353,7 +317,7 @@ var BotHandler = /** @class */ (function () {
         });
         return this;
     };
-    BotHandler.prototype.registerInteractiveRequest = function (user_id, callback_id, ts, callback) {
+    Rusty.prototype.__registerInteractiveRequest = function (user_id, callback_id, ts, callback) {
         var user = interactiveMap[user_id];
         if (typeof user === 'undefined') {
             user = {};
@@ -361,7 +325,7 @@ var BotHandler = /** @class */ (function () {
         }
         user[callback_id] = callback;
     };
-    BotHandler.prototype.unregisterInteractiveRequest = function (user_id, callback_id) {
+    Rusty.prototype.__unregisterInteractiveRequest = function (user_id, callback_id) {
         try {
             var ip = interactiveMap[user_id][callback_id];
             interactiveMap[user_id][callback_id] = undefined;
@@ -371,7 +335,6 @@ var BotHandler = /** @class */ (function () {
         }
         return '';
     };
-    return BotHandler;
+    return Rusty;
 }());
-exports.default = BotHandler;
-//# sourceMappingURL=BotHandler.js.map
+exports["default"] = Rusty;

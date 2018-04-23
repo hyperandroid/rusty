@@ -1,8 +1,9 @@
 import express = require("express");
 import bodyParser = require('body-parser');
-import BotHandler, {HandlerProperties, HearInfo, InteractiveAction} from "../BotHandler";
+import Rusty, {HandlerProperties, HearInfo, InteractiveAction} from "../Rusty";
 import {Attachment, ConversationHelper, InteractiveConversationHelper} from "../ConversationHelper";
 import * as fs from "fs";
+import StorageImpl from "../storage/Storage";
 
 const app = express();
 const PORT=4690;
@@ -85,7 +86,9 @@ try {
     process.exit(-1);
 }
 
-const bh = new BotHandler()
+const storage = new StorageImpl(__dirname+"/..");
+
+const bh = new Rusty(storage)
     .installForWebServer(app, credentials)
     .onSlashCommand(
         '/slang',
@@ -129,26 +132,16 @@ const bh = new BotHandler()
             ch.sendToIncomingWebHook('lololol');
         })
     .onEvent(
-        ['test'],
+        ['test(.*)'],
         ['direct_mention','mention','app_mention'],
         (ch:ConversationHelper, event:string, heard:HearInfo ) => {
 
             const interactive_1 = {
                 ephemeral: true,
-                on: {
-                    '2': (ich: InteractiveConversationHelper, actions: InteractiveAction[]) => {
-                        ich.interactive(interactive_2);
-                        ich.finish();
-                    },
-                    '3': (ich: InteractiveConversationHelper, actions: InteractiveAction[]) => {
-                        ich.interactive(interactive_3);
-                        ich.finish();
-                    }
-                },
                 attachments: [
                     {
-                        title: 'GOTO-2-OR-3',
-                        fallback: 'go to 2-3',
+                        title: 'Message 1',
+                        fallback: 'Message 1',
                         callback_id: ConversationHelper.RandomCallbackUUID(),
                         attachment_type: 'default',
                         actions: [
@@ -167,7 +160,35 @@ const bh = new BotHandler()
                         ]
 
                     }
-                ]
+                ],
+                on: {
+                    '2': (ich: InteractiveConversationHelper, actions: InteractiveAction[]) => {
+                        ich.interactive(interactive_2);
+                        ich.setReply([
+                            {
+                                text: `Your choice: ${actions.map((action) => {
+                                    return action.value
+                                }) }`,
+                                fallback: ``,
+                                color: '#902020'
+                            }
+                        ], true, true);
+                    },
+                    '3': (ich: InteractiveConversationHelper, actions: InteractiveAction[]) => {
+                        ich.interactive(interactive_3);
+                        ich.setReply([
+                            {
+                                text: `Your choice: *${actions.map((action) => {
+                                    return action.value
+                                }) }*`,
+                                fallback: ``,
+                                color: '#209020',
+                                pretext: `Selected 3 as option`,
+
+                            }
+                        ], true, false);
+                    }
+                },
             };
 
             const interactive_2 = {
@@ -175,13 +196,23 @@ const bh = new BotHandler()
                 on: {
                     'id_default': (ich: InteractiveConversationHelper, actions: InteractiveAction[]) => {
                         ich.interactive(interactive_3);
-                        ich.finish();
+                        ich.setReply([
+                            {
+                                text: `Your choice: *${actions.map((action) => {
+                                    return action.value
+                                }) }*`,
+                                fallback: ``,
+                                color: '#902090',
+                                pretext: `JAJEJO`,
+
+                            }
+                        ], false, true );
                     }
                 },
                 attachments: [
                     {
-                        title: 'GOTO-3',
-                        fallback: 'go to 3',
+                        title: 'Message 2',
+                        fallback: 'message 2',
                         callback_id: ConversationHelper.RandomCallbackUUID(),
                         attachment_type: 'default',
                         actions: [
@@ -202,13 +233,13 @@ const bh = new BotHandler()
                 on: {
                     'id_default': (ich: InteractiveConversationHelper, actions: InteractiveAction[]) => {
                         ich.interactive(interactive_1);
-                        ich.finish();
+                        ich.setReply("reply reply", false, false);
                     }
                 },
                 attachments: [
                     {
-                        title: 'GOTO-1',
-                        fallback: 'go to 1',
+                        title: 'Message 3',
+                        fallback: 'message 3',
                         callback_id: ConversationHelper.RandomCallbackUUID(),
                         attachment_type: 'default',
                         actions: [

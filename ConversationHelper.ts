@@ -1,7 +1,9 @@
-import BotHandler, {InteractiveAction, InteractiveCallback, Team, User} from "./BotHandler";
+import BotHandler, {InteractiveAction, InteractiveCallback} from "./Rusty";
 import express = require("express");
 import request = require("request");
 import process = require('process');
+import {Team} from "./storage/Team";
+import {User} from "./storage/User";
 
 export interface AttachmentField {
     title? : string;
@@ -170,10 +172,6 @@ export class ConversationHelper {
         });
     }
 
-    addReaction() {
-
-    }
-
     /**
      * Interactive calls, don't need to be ack'ed.
      *
@@ -207,7 +205,7 @@ export class ConversationHelper {
                     console.log(`received reply to interactive ${JSON.stringify(body)}`);
 
                     // on reply callback, take message ts identifier to make responses.
-                    this.bh.registerInteractiveRequest(
+                    this.bh.__registerInteractiveRequest(
                         this.user.id,
                         callback_id,
                         ts,
@@ -320,7 +318,7 @@ export class InteractiveConversationHelper extends ConversationHelper {
      *
      */
     setReply(attachments : string|Attachment[], ephemeral:boolean, replaceOriginal:boolean ) {
-        const ts = this.bh.unregisterInteractiveRequest( this.user.id, this.callback_id );
+        const ts = this.bh.__unregisterInteractiveRequest( this.user.id, this.callback_id );
 
         console.log('updating message : '+ts);
 

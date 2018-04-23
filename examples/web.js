@@ -1,10 +1,11 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
+exports.__esModule = true;
 var express = require("express");
 var bodyParser = require("body-parser");
-var BotHandler_1 = require("../BotHandler");
+var Rusty_1 = require("../Rusty");
 var ConversationHelper_1 = require("../ConversationHelper");
 var fs = require("fs");
+var Storage_1 = require("../storage/Storage");
 var app = express();
 var PORT = 4690;
 app.use(bodyParser.json()); // for parsing application/json
@@ -54,7 +55,7 @@ var slangMap = {
     'til': 'Today I Learnt',
     'tyt': 'Take Your Time',
     'wfm': 'Works For Me',
-    'wtf': 'What The F**k',
+    'wtf': 'What The F**k'
 };
 app.get("/", function (req, res) {
     res.send("hey ya!!");
@@ -81,7 +82,8 @@ catch (e) {
     console.error("can't load credentials: ", e);
     process.exit(-1);
 }
-var bh = new BotHandler_1.default()
+var storage = new Storage_1["default"](__dirname + "/..");
+var bh = new Rusty_1["default"](storage)
     .installForWebServer(app, credentials)
     .onSlashCommand('/slang', function (ch, command, text) {
     if (command === '/slang') {
@@ -115,23 +117,13 @@ var bh = new BotHandler_1.default()
     ch.reply(heard.matches[1]);
     ch.sendToIncomingWebHook('lololol');
 })
-    .onEvent(['test'], ['direct_mention', 'mention', 'app_mention'], function (ch, event, heard) {
+    .onEvent(['test(.*)'], ['direct_mention', 'mention', 'app_mention'], function (ch, event, heard) {
     var interactive_1 = {
         ephemeral: true,
-        on: {
-            '2': function (ich, actions) {
-                ich.interactive(interactive_2);
-                ich.finish();
-            },
-            '3': function (ich, actions) {
-                ich.interactive(interactive_3);
-                ich.finish();
-            }
-        },
         attachments: [
             {
-                title: 'GOTO-2-OR-3',
-                fallback: 'go to 2-3',
+                title: 'Message 1',
+                fallback: 'Message 1',
                 callback_id: ConversationHelper_1.ConversationHelper.RandomCallbackUUID(),
                 attachment_type: 'default',
                 actions: [
@@ -149,20 +141,56 @@ var bh = new BotHandler_1.default()
                     },
                 ]
             }
-        ]
+        ],
+        on: {
+            '2': function (ich, actions) {
+                ich.interactive(interactive_2);
+                ich.setReply([
+                    {
+                        text: "Your choice: " + actions.map(function (action) {
+                            return action.value;
+                        }),
+                        fallback: "",
+                        color: '#902020'
+                    }
+                ], true, true);
+            },
+            '3': function (ich, actions) {
+                ich.interactive(interactive_3);
+                ich.setReply([
+                    {
+                        text: "Your choice: *" + actions.map(function (action) {
+                            return action.value;
+                        }) + "*",
+                        fallback: "",
+                        color: '#209020',
+                        pretext: "Selected 3 as option"
+                    }
+                ], true, false);
+            }
+        }
     };
     var interactive_2 = {
         ephemeral: true,
         on: {
             'id_default': function (ich, actions) {
                 ich.interactive(interactive_3);
-                ich.finish();
+                ich.setReply([
+                    {
+                        text: "Your choice: *" + actions.map(function (action) {
+                            return action.value;
+                        }) + "*",
+                        fallback: "",
+                        color: '#902090',
+                        pretext: "JAJEJO"
+                    }
+                ], false, true);
             }
         },
         attachments: [
             {
-                title: 'GOTO-3',
-                fallback: 'go to 3',
+                title: 'Message 2',
+                fallback: 'message 2',
                 callback_id: ConversationHelper_1.ConversationHelper.RandomCallbackUUID(),
                 attachment_type: 'default',
                 actions: [
@@ -181,13 +209,13 @@ var bh = new BotHandler_1.default()
         on: {
             'id_default': function (ich, actions) {
                 ich.interactive(interactive_1);
-                ich.finish();
+                ich.setReply("reply reply", false, false);
             }
         },
         attachments: [
             {
-                title: 'GOTO-1',
-                fallback: 'go to 1',
+                title: 'Message 3',
+                fallback: 'message 3',
                 callback_id: ConversationHelper_1.ConversationHelper.RandomCallbackUUID(),
                 attachment_type: 'default',
                 actions: [
@@ -231,4 +259,3 @@ function slangVerb(words) {
     }
     return { rightStr: rightStr, wrongStr: wrongStr };
 }
-//# sourceMappingURL=web.js.map

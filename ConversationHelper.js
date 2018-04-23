@@ -94,8 +94,6 @@ var ConversationHelper = /** @class */ (function () {
             }
         });
     };
-    ConversationHelper.prototype.addReaction = function () {
-    };
     /**
      * Interactive calls, don't need to be ack'ed.
      *
@@ -121,7 +119,7 @@ var ConversationHelper = /** @class */ (function () {
                 }
                 console.log("received reply to interactive " + JSON.stringify(body));
                 // on reply callback, take message ts identifier to make responses.
-                _this.bh.registerInteractiveRequest(_this.user.id, callback_id, ts, function (hc, actions) {
+                _this.bh.__registerInteractiveRequest(_this.user.id, callback_id, ts, function (hc, actions) {
                     actions.forEach(function (action) {
                         var on_callback = options.on[action.value];
                         if (typeof on_callback === 'undefined') {
@@ -221,7 +219,7 @@ var InteractiveConversationHelper = /** @class */ (function (_super) {
      *
      */
     InteractiveConversationHelper.prototype.setReply = function (attachments, ephemeral, replaceOriginal) {
-        var ts = this.bh.unregisterInteractiveRequest(this.user.id, this.callback_id);
+        var ts = this.bh.__unregisterInteractiveRequest(this.user.id, this.callback_id);
         console.log('updating message : ' + ts);
         if (typeof attachments !== 'undefined') {
             var res = {
