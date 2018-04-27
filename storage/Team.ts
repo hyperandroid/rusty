@@ -19,6 +19,19 @@ export interface Team {
     name : string;
     created_by : string;
     url : string;
+
+    /**
+     * Bot info.
+     */
     bot? : Bot;
+
+    /**
+     * If defined, incoming webhook.
+     */
     incoming_web_hook? : TeamIncomingWebHook;
+
+    /**
+     * Accepted scopes list.
+     */
+    scopes : string[];
 }

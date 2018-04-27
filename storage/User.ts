@@ -4,5 +4,4 @@ export interface User {
     team_id : string;
     user: string;
     access_token : string;
-    scopes : string[];
 }

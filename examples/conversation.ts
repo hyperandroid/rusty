@@ -4,6 +4,8 @@ import Rusty, {HandlerProperties, HearInfo, InteractiveAction} from "../Rusty";
 import {Attachment, ConversationHelper, InteractiveConversationHelper} from "../ConversationHelper";
 import * as fs from "fs";
 import StorageImpl from "../storage/Storage";
+import {User} from "../storage/User";
+import {Team} from "../storage/Team";
 
 const app = express();
 const PORT=4690;
@@ -14,51 +16,6 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.listen(PORT, function () {
     console.log("Example app listening on port " + PORT);
 });
-
-const slangMap = {
-    'afk'  : 'Away From Keyboard',
-    'afaik': 'As Far As I Know',
-    'aka'  : 'Also Known As',
-    'asap' : 'As Soon As Possible',
-    'atm'  : 'At The Moment',
-    'btw'  : 'By The Way',
-    'brb'  : 'Be Right Back',
-    'cu'   : 'See You',
-    'dnd'  : 'Do Not Disturb',
-    'diy'  : 'Do It Yourself',
-    'eta'  : 'Estimated Time of Arrival',
-    'eod'  : 'End Of Discussion',
-    'faq'  : 'Frequently Asked Question',
-    'ftw'  : 'For The Win',
-    'fyi'  : 'For Your Information',
-    'gg'   : 'Good Game',
-    'gtfo' : 'Get The F**k Out',
-    'icymi': 'In Case You Missed It',
-    'iirc' : 'If I Remind Correctly',
-    'imo'  : 'In My Opinion',
-    'imho' : 'In My Humble Opinion',
-    'l8r'  : 'Later',
-    'lmao' : 'Laugh My Ass Off',
-    'lkm'  : 'Let Me Know',
-    'lol'  : 'Laugh Out Loudly',
-    'nntr' : 'No Need To Reply',
-    'nm'   : 'Never Mind',
-    'omg'  : 'Oh My God',
-    'omfg' : 'Oh My F***ing God',
-    'omw'  : 'On My Way',
-    'otoh' : 'On The Other Hand',
-    'rotfl': 'Rolling On The Floor Laughing',
-    'rsvp' : 'Please Reply',
-    'pr'   : 'Press Relations',
-    'pst'  : 'Piece Of Shit',
-    'tba'  : 'To Be Announced',
-    'tbc'  : 'To Be Continued',
-    'ttyl' : 'Talk To You Later',
-    'til'  : 'Today I Learnt',
-    'tyt'  : 'Take Your Time',
-    'wfm'  : 'Works For Me',
-    'wtf'  : 'What The F**k',
-};
 
 app.get("/", function(req:express.Request, res:express.Response) {
     res.send("hey ya!!");
@@ -103,41 +60,11 @@ function RandomCallbackUUID() {
 const storage = new StorageImpl(__dirname+"/..");
 
 const bh = new Rusty(storage)
+    .onAuthorization( ( user: User, team: Team ) => {
+        storage.addUser(user);
+        storage.addTeam(team);
+    })
     .installForWebServer(app, credentials)
-    .onSlashCommand(
-        '/slang',
-        (ch:ConversationHelper, command:string, text:string) => {
-
-            if (command==='/slang' ) {
-                const {rightStr, wrongStr} = slangVerb(text.split(' '));
-
-                const attachments : Attachment[] = [];
-
-                if ( rightStr!=='' ) {
-                    attachments.push({
-                        fallback : rightStr,
-                        color : '#208020',
-                        pretext : 'Translations:',
-                        text : rightStr,
-                        mrkdwn_in : ['text', 'pretext']
-                    });
-                }
-
-                if ( wrongStr!=='' ) {
-                    attachments.push({
-                        fallback : wrongStr,
-                        color : '#a03030',
-                        pretext : 'Not found translations:',
-                        text : wrongStr,
-                        mrkdwn_in : ['text', 'pretext']
-                    });
-                }
-
-                ch.reply('', attachments, true );
-            } else {
-                ch.reply('unknown command', null,true);
-            }
-        })
     .onEvent(
         ['hey (.*)'],
         ['direct_message', 'direct_mention', 'mention', 'app_mention'],
@@ -272,43 +199,3 @@ const bh = new Rusty(storage)
             ch.interactive(interactive_1);
 
         });
-
-interface SlangVerbResult {
-    rightStr : string;
-    wrongStr : string;
-}
-
-function slangVerb( words: string[] ) : SlangVerbResult {
-
-    // try no find a match for the following definitions:
-
-    const wrong : string[] = [];
-    const right : string[][] = [];
-
-    words.forEach( w => {
-        const definition = slangMap[w.toLocaleLowerCase()];
-        if ( typeof definition==='undefined' ) {
-            wrong.push(w);
-        } else {
-            right.push( [w, definition] );
-        }
-    });
-
-    let wrongStr = "";
-
-    if ( wrong.length>0 ) {
-        wrongStr= `I don't know what these mean: ${wrong.map( w => {return "_"+w+"_"} )}\n`;
-    }
-
-    let rightStr= "";
-    if ( right.length>0 ) {
-        right.forEach( (pair, index) => {
-            rightStr+= `*${pair[0]}* = ${pair[1]}`;
-            if ( index<right.length-1 ) {
-                rightStr+="\n";
-            }
-        });
-    }
-
-    return {rightStr, wrongStr};
-}

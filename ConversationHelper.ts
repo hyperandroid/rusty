@@ -1,9 +1,8 @@
 import BotHandler, {InteractiveAction, InteractiveCallback} from "./Rusty";
 import express = require("express");
-import request = require("request");
-import process = require('process');
 import {Team} from "./storage/Team";
 import {User} from "./storage/User";
+import {clientAPI, slackAPI} from "./api";
 
 export interface AttachmentField {
     title? : string;
@@ -117,26 +116,27 @@ export class ConversationHelper {
             form.attachments= JSON.stringify(attachments);
         }
 
-        request
-            .post(
-                'https://slack.com/api/' + endPoint,
-                {
-                    headers: {
-                        'content-type': 'application/json; charset=utf-8'
-                    },
-                    form: form
+        slackAPI(
+            {
+                url: endPoint,
+                headers: {
+                    'content-type': 'application/json; charset=utf-8'
                 },
-                (error: Error, response: request.Response, body_: any) => {
-                    const body = JSON.parse(body_);
+                form: form,
+                method : 'POST'
+            },
+            (error: Error, body: any) => {
 
-                    if ( typeof callback!=='undefined' ) {
+                if (error) {
+                    console.log(error, body);
+                } else {
+                    if (typeof callback !== 'undefined') {
                         callback(body);
                     }
+                }
 
-                    if (error || response.statusCode !== 200 || body.ok === false) {
-                        console.log(error, body);
-                    }
-                });
+            });
+
     }
 
     /**
@@ -156,19 +156,21 @@ export class ConversationHelper {
             return;
         }
 
-        request({
-            method: "POST",
-            url: url,
-            headers: {'content-type': 'application/json'},
-            json: {
-                text: message,
-                attachments : (typeof attachments!=='undefined' ? attachments : [])
-            }
-        }, function (error, response, body) {
-            if (error) {
-                console.log(error);
-            }
-        });
+        clientAPI(
+            {
+                method: "POST",
+                url: url,
+                headers: {'content-type': 'application/json'},
+                json : {
+                    text: message,
+                    attachments : (typeof attachments!=='undefined' ? attachments : [])
+                }
+            },
+            (error:Error, body:any) => {
+                if (error) {
+                    console.log(error);
+                }
+            });
     }
 
     /**
@@ -201,7 +203,7 @@ export class ConversationHelper {
                         ts = body.message_ts;
                     }
 
-                    console.log(`received reply to interactive ${JSON.stringify(body)}`);
+                    // console.log(`received reply to interactive ${JSON.stringify(body)}`);
 
                     // on reply callback, take message ts identifier to make responses.
                     this.bh.__registerInteractiveRequest(
@@ -305,9 +307,7 @@ export class InteractiveConversationHelper extends ConversationHelper {
      *
      */
     setReply(attachments : string|Attachment[], ephemeral:boolean, replaceOriginal:boolean ) {
-        const ts = this.bh.__unregisterInteractiveRequest( this.user.id, this.callback_id );
-
-        console.log('updating message : '+ts);
+        this.bh.__unregisterInteractiveRequest( this.user.id, this.callback_id );
 
         if ( typeof attachments!=='undefined' ) {
 

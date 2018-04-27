@@ -10,7 +10,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-var request = require("request");
+var api_1 = require("./api");
 var ConversationHelper = /** @class */ (function () {
     function ConversationHelper(bh, user, team, response, body) {
         this.responded = false;
@@ -47,19 +47,21 @@ var ConversationHelper = /** @class */ (function () {
         if (attachments.length > 0) {
             form.attachments = JSON.stringify(attachments);
         }
-        request
-            .post('https://slack.com/api/' + endPoint, {
+        api_1.slackAPI({
+            url: endPoint,
             headers: {
                 'content-type': 'application/json; charset=utf-8'
             },
-            form: form
-        }, function (error, response, body_) {
-            var body = JSON.parse(body_);
-            if (typeof callback !== 'undefined') {
-                callback(body);
-            }
-            if (error || response.statusCode !== 200 || body.ok === false) {
+            form: form,
+            method: 'POST'
+        }, function (error, body) {
+            if (error) {
                 console.log(error, body);
+            }
+            else {
+                if (typeof callback !== 'undefined') {
+                    callback(body);
+                }
             }
         });
     };
@@ -79,7 +81,7 @@ var ConversationHelper = /** @class */ (function () {
             console.error("Can't find a team, or team w/o web hook info.");
             return;
         }
-        request({
+        api_1.clientAPI({
             method: "POST",
             url: url,
             headers: { 'content-type': 'application/json' },
@@ -87,7 +89,7 @@ var ConversationHelper = /** @class */ (function () {
                 text: message,
                 attachments: (typeof attachments !== 'undefined' ? attachments : [])
             }
-        }, function (error, response, body) {
+        }, function (error, body) {
             if (error) {
                 console.log(error);
             }
@@ -116,7 +118,7 @@ var ConversationHelper = /** @class */ (function () {
                 catch (e) {
                     ts = body.message_ts;
                 }
-                console.log("received reply to interactive " + JSON.stringify(body));
+                // console.log(`received reply to interactive ${JSON.stringify(body)}`);
                 // on reply callback, take message ts identifier to make responses.
                 _this.bh.__registerInteractiveRequest(_this.user.id, callback_id, ts, function (hc, actions) {
                     actions.forEach(function (action) {
@@ -207,8 +209,7 @@ var InteractiveConversationHelper = /** @class */ (function (_super) {
      *
      */
     InteractiveConversationHelper.prototype.setReply = function (attachments, ephemeral, replaceOriginal) {
-        var ts = this.bh.__unregisterInteractiveRequest(this.user.id, this.callback_id);
-        console.log('updating message : ' + ts);
+        this.bh.__unregisterInteractiveRequest(this.user.id, this.callback_id);
         if (typeof attachments !== 'undefined') {
             var res = {
                 replace_original: replaceOriginal,

@@ -4,12 +4,12 @@
  * Sets oauth and events endpoints
  *
  */
-exports.__esModule = true;
+Object.defineProperty(exports, "__esModule", { value: true });
 var ConversationHelper_1 = require("./ConversationHelper");
 var api_1 = require("./api");
-var events_1 = require("events");
 function testAuth(auth_token, callback) {
-    api_1.clientAPI('auth.test', {
+    api_1.slackAPI({
+        url: 'auth.test',
         form: {
             token: auth_token
         },
@@ -17,12 +17,11 @@ function testAuth(auth_token, callback) {
     }, callback);
 }
 var interactiveMap = {};
-var Rusty = (function () {
+var Rusty = /** @class */ (function () {
     function Rusty(storage) {
         this.slashCommands = {};
         this.events = {};
-        this.userEmitter = new events_1.EventEmitter();
-        this.teamEmitter = new events_1.EventEmitter();
+        this.authObservers = [];
         this.storage = storage;
     }
     Rusty.prototype.installForWebServer = function (app, props) {
@@ -30,6 +29,16 @@ var Rusty = (function () {
         this.__initializeOAuth(props.OAuth);
         this.__initializeEventsAndSlashCommands(props.Web);
         return this;
+    };
+    Rusty.prototype.onAuthorization = function (cb) {
+        this.authObservers.push(cb);
+        return this;
+    };
+    Rusty.prototype.removeAuthorizationObserver = function (cb) {
+        var index = this.authObservers.indexOf(cb);
+        if (index !== -1) {
+            this.authObservers.splice(index, 1);
+        }
     };
     Rusty.prototype.__initializeOAuth = function (oauthProps) {
         var _this = this;
@@ -45,7 +54,8 @@ var Rusty = (function () {
                 console.error("Error in bot oauth.");
             }
             else {
-                api_1.clientAPI('oauth.access', {
+                api_1.slackAPI({
+                    url: 'oauth.access',
                     form: {
                         code: req.query.code,
                         client_id: oauthProps.client_id,
@@ -64,7 +74,8 @@ var Rusty = (function () {
                                     id: teamIdentity.team_id,
                                     url: teamIdentity.url,
                                     created_by: teamIdentity.user_id,
-                                    name: teamIdentity.team
+                                    name: teamIdentity.team,
+                                    scopes: auth.scope.split(/\,/),
                                 };
                                 if (typeof auth.incoming_webhook !== "undefined") {
                                     team.incoming_web_hook = {
@@ -86,16 +97,14 @@ var Rusty = (function () {
                                 // get bot name by authorizing on its token.
                                 testAuth(team.bot.access_token, function (error, value) {
                                     team.bot.name = value.user;
+                                    user = {
+                                        id: teamIdentity.user_id,
+                                        user: teamIdentity.user,
+                                        team_id: teamIdentity.team_id,
+                                        access_token: auth.access_token
+                                    };
+                                    _this.__emitAuth(user, team);
                                 });
-                                user = {
-                                    id: teamIdentity.user_id,
-                                    user: teamIdentity.user,
-                                    team_id: teamIdentity.team_id,
-                                    scopes: auth.scope.split(/\,/),
-                                    access_token: auth.access_token
-                                };
-                                _this.userEmitter.emit('user', user);
-                                _this.teamEmitter.emit('team', team);
                             }
                             else {
                                 isError = true;
@@ -110,6 +119,11 @@ var Rusty = (function () {
                     }
                 });
             }
+        });
+    };
+    Rusty.prototype.__emitAuth = function (user, team) {
+        this.authObservers.forEach(function (ao) {
+            ao(user, team);
         });
     };
     Rusty.prototype.__initializeEventsAndSlashCommands = function (webProps) {
@@ -137,7 +151,6 @@ var Rusty = (function () {
                 res.send(body.challenge);
             }
             else {
-                console.log(body);
                 if (typeof body.command !== "undefined") {
                     // slash commands
                     _this.__handleSlashCommand(body, res);
@@ -251,8 +264,7 @@ var Rusty = (function () {
                     id: body.event.user,
                     user: '',
                     access_token: body.token,
-                    team_id: body.team_id,
-                    scopes: []
+                    team_id: body.team_id
                 };
                 // could check users.identity to get user.name !!
             }
@@ -280,8 +292,7 @@ var Rusty = (function () {
                     id: body.user_id,
                     user: body.user_name,
                     access_token: body.token,
-                    team_id: body.team_id,
-                    scopes: []
+                    team_id: body.team_id
                 };
             }
             var hc = new ConversationHelper_1.ConversationHelper(this, user, team, res, body);
@@ -360,4 +371,5 @@ var Rusty = (function () {
     };
     return Rusty;
 }());
-exports["default"] = Rusty;
+exports.default = Rusty;
+//# sourceMappingURL=Rusty.js.map

@@ -8,9 +8,8 @@ import express = require("express");
 import {ConversationHelper, InteractiveConversationHelper} from "./ConversationHelper";
 import {Team, TeamIncomingWebHook} from "./storage/Team";
 import {User} from "./storage/User";
-import {APICallback, clientAPI} from "./api";
+import {APICallback, slackAPI} from "./api";
 import Storage from "./storage/Storage";
-import {EventEmitter} from "events";
 
 export interface OAuthProperties {
     client_id       : string;
@@ -87,9 +86,9 @@ export type InteractiveCallback = (ch:InteractiveConversationHelper, responses:I
 
 function testAuth<T>( auth_token : string, callback : APICallback<T> ) {
 
-    clientAPI<T>(
-        'auth.test',
+    slackAPI<T>(
         {
+            url : 'auth.test',
             form: {
                 token: auth_token
             },
@@ -109,6 +108,8 @@ interface EventPattern {
 
 let interactiveMap : UserInteractiveRequestMap = {};
 
+export type AuthCallback = ( user:User, team:Team ) => void;
+
 export default class Rusty {
 
     private app : express.Express;
@@ -117,8 +118,7 @@ export default class Rusty {
     private slashCommands : {[key:string]:SlashCommandCallback} = {};
     private events : {[key:string]:EventPattern[]} = {};
 
-    private userEmitter : EventEmitter = new EventEmitter();
-    private teamEmitter : EventEmitter = new EventEmitter();
+    private authObservers : AuthCallback[] = [];
 
     constructor( storage : Storage ) {
         this.storage= storage;
@@ -131,6 +131,18 @@ export default class Rusty {
         this.__initializeEventsAndSlashCommands( props.Web );
 
         return this;
+    }
+
+    onAuthorization( cb : AuthCallback ) : Rusty {
+        this.authObservers.push(cb);
+        return this;
+    }
+
+    removeAuthorizationObserver( cb: AuthCallback ) {
+        const index = this.authObservers.indexOf(cb);
+        if ( index!==-1 ) {
+            this.authObservers.splice(index, 1);
+        }
     }
 
     __initializeOAuth( oauthProps : OAuthProperties ) {
@@ -150,15 +162,15 @@ export default class Rusty {
                 console.error("Error in bot oauth.");
             } else {
 
-                clientAPI<OAuthResponse>(
-                    'oauth.access',
+                slackAPI<OAuthResponse>(
                     {
-                        form : {
+                        url     : 'oauth.access',
+                        form    : {
                             code            : req.query.code,
                             client_id       : oauthProps.client_id,
                             client_secret   : oauthProps.client_secret
                         },
-                        method : 'POST'
+                        method  : 'POST'
                     },
                     (error: Error, auth: OAuthResponse) => {
 
@@ -177,7 +189,8 @@ export default class Rusty {
                                         id : teamIdentity.team_id,
                                         url: teamIdentity.url,
                                         created_by : teamIdentity.user_id,
-                                        name : teamIdentity.team
+                                        name : teamIdentity.team,
+                                        scopes : auth.scope.split(/\,/),
                                     };
 
                                     if ( typeof auth.incoming_webhook!=="undefined" ) {
@@ -202,18 +215,17 @@ export default class Rusty {
                                     // get bot name by authorizing on its token.
                                     testAuth( team.bot.access_token, (error:Error, value:OAuthBotIdentity) => {
                                         team.bot.name = value.user;
+
+                                        user = {
+                                            id : teamIdentity.user_id,
+                                            user : teamIdentity.user,
+                                            team_id : teamIdentity.team_id,
+                                            access_token : auth.access_token
+                                        };
+
+                                        this.__emitAuth( user, team );
                                     });
 
-                                    user = {
-                                        id : teamIdentity.user_id,
-                                        user : teamIdentity.user,
-                                        team_id : teamIdentity.team_id,
-                                        scopes : auth.scope.split(/\,/),
-                                        access_token : auth.access_token
-                                    };
-
-                                    this.userEmitter.emit('user', user);
-                                    this.teamEmitter.emit('team', team);
 
                                 } else {
                                     isError = true;
@@ -229,6 +241,12 @@ export default class Rusty {
                     });
             }
         });
+    }
+
+    __emitAuth(user: User, team: Team) {
+        this.authObservers.forEach( ao => {
+            ao(user, team);
+        })
     }
 
     __initializeEventsAndSlashCommands( webProps:WebAuthProperties ) {
@@ -260,8 +278,6 @@ export default class Rusty {
                 res.contentType( "text/plain" );
                 res.send( body.challenge );
             } else {
-
-                console.log(body);
 
                 if ( typeof body.command!=="undefined" ) {
                     // slash commands
@@ -398,8 +414,7 @@ export default class Rusty {
                     id : body.event.user,
                     user : '',
                     access_token : body.token,
-                    team_id : body.team_id,
-                    scopes: []
+                    team_id : body.team_id
                 };
 
                 // could check users.identity to get user.name !!
@@ -436,8 +451,7 @@ export default class Rusty {
                     id : body.user_id,
                     user : body.user_name,
                     access_token : body.token,
-                    team_id : body.team_id,
-                    scopes: []
+                    team_id : body.team_id
                 }
             }
 
